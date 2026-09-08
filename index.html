@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0369a1">
+<title>ระบบจดมิเตอร์น้ำ</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="netbar" class="netbar hidden">ออฟไลน์ — ข้อมูลจะถูกส่งอัตโนมัติเมื่อกลับมาออนไลน์</div>
+
+<!-- LOGIN -->
+<section id="loginView" class="view">
+  <div class="login-card">
+    <div class="logo">💧</div>
+    <h1>ระบบจดมิเตอร์น้ำ</h1>
+    <p class="muted">16 จุดตรวจวัด</p>
+    <label>อีเมลผู้ใช้</label>
+    <input id="loginEmail" type="email" placeholder="staff1@example.com" autocomplete="username">
+    <label>PIN</label>
+    <input id="loginPin" type="password" inputmode="numeric" placeholder="••••••" autocomplete="current-password">
+    <button id="btnLogin" class="btn primary">เข้าสู่ระบบ</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</section>
+
+<!-- MAIN -->
+<section id="mainView" class="view hidden">
+  <header class="appbar">
+    <div>
+      <div class="appbar-title">💧 จดมิเตอร์น้ำ</div>
+      <div class="appbar-sub"><span id="bizDate"></span> · <span id="userName"></span></div>
+    </div>
+    <button id="btnLogout" class="btn ghost small">ออก</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="entry">กรอกข้อมูล</button>
+    <button class="tab" data-tab="summary">สรุปวันนี้</button>
+    <button class="tab" data-tab="history">ประวัติ</button>
+  </nav>
+
+  <!-- TAB: ENTRY -->
+  <div id="tab-entry" class="tabpanel">
+    <div class="statbar">
+      <div class="stat"><b id="stDone">0</b><span>บันทึกแล้ว</span></div>
+      <div class="stat"><b id="stPending">0</b><span>ค้าง</span></div>
+      <div class="stat alert"><b id="stAlert">0</b><span>ผิดปกติ</span></div>
+      <div class="stat"><b id="stUsage">0</b><span>หน่วยรวม</span></div>
+    </div>
+    <div id="queueBar" class="queuebar hidden"></div>
+    <div id="meterList" class="list"></div>
+    <div class="sticky-actions">
+      <button id="btnSubmit" class="btn primary big">บันทึกข้อมูลที่กรอก</button>
+    </div>
+    <div id="entryMsg" class="msg"></div>
+  </div>
+
+  <!-- TAB: SUMMARY -->
+  <div id="tab-summary" class="tabpanel hidden">
+    <div class="row">
+      <input id="sumDate" type="date">
+      <button id="btnLoadSum" class="btn">ดู</button>
+    </div>
+    <div id="summaryBox" class="list"></div>
+  </div>
+
+  <!-- TAB: HISTORY -->
+  <div id="tab-history" class="tabpanel hidden">
+    <div class="row">
+      <select id="hisMeter"></select>
+      <button id="btnLoadHis" class="btn">ดู</button>
+    </div>
+    <div id="historyBox" class="list"></div>
+  </div>
+</section>
+
+<div id="loading" class="loading hidden"><div class="spinner"></div></div>
+<script src="app.js"></script>
+</body>
+</html>
