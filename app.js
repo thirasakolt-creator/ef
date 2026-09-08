@@ -304,21 +304,30 @@ function onEditInput(e) {
 }
 
 /*** ══════════ SUBMIT ══════════ ***/
-$('btnSubmit').onclick = async function () {
-  const entries = [];
-  document.querySelectorAll('.mval').forEach(function (inp) {
-    const v = inp.value.replace(/\D/g, '');
-    if (!v) return;
-    const id = inp.dataset.id;
-    entries.push({
-      readingId: uuid(),
-      meterId: id,
-      value: v,
-      mode: document.querySelector('.mfull[data-id="' + id + '"]').checked ? 'FULL' : 'SUFFIX',
-      force: !!S.unlocked[id],
-      source: navigator.onLine ? 'ONLINE' : 'OFFLINE_SYNC'
+$('btnLoadSum').onclick = async function () {
+  busy(true);
+  try {
+    const d = await api('getDay', { date: $('sumDate').value });
+    
+    // สร้างหัวตารางเหมือนรูปที่คุณส่งมา
+    let html = `<div class="report-header">รายงานมิเตอร์น้ำวันที่ ${d.date}</div>`;
+    html += `<div class="report-row" style="font-weight:bold; background:#eee;">
+               <div>ที่</div><div>จุดที่ตั้ง</div><div>จุดที่ใช้น้ำ</div><div>เลขมิเตอร์</div>
+             </div>`;
+             
+    // วนลูปข้อมูล
+    d.items.forEach((it, idx) => {
+      html += `<div class="report-row">
+                 <div>${idx + 1}</div>
+                 <div>${it.meterName}</div>
+                 <div>${it.location}</div>
+                 <div>${it.fullReading !== null ? it.fullReading : '—'}</div>
+               </div>`;
     });
-  });
+    
+    $('summaryBox').innerHTML = html;
+  } catch (e) { alert(e.message); } finally { busy(false); }
+};
   if (!entries.length) return msg('entryMsg', 'ยังไม่ได้กรอกข้อมูล', 'err');
 
   if (!navigator.onLine) {
