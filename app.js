@@ -1,7 +1,7 @@
 /*** ====== ตั้งค่าตรงนี้ ====== ***/
 const CONFIG = {
-  API_URL: 'PASTE_YOUR_EXEC_URL_HERE',
-  API_KEY: 'CHANGE_ME_TO_RANDOM_STRING_123456'
+  API_URL: 'https://script.google.com/macros/s/AKfycbyFArEf2z7QtIHYU1oHpcfTUA-AKRI82ymgUMKhZJJOFQFLJltpNRm9_xfxcsaiUMMD/exec',
+  API_KEY: 'omoover011'
 };
 
 /*** ====== STATE ====== ***/
