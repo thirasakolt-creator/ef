@@ -1,5 +1,4 @@
 {
-  "id": "/water-meter-pwa/",
   "name": "ระบบจดมิเตอร์น้ำ 16 จุด",
   "short_name": "จดมิเตอร์น้ำ",
   "description": "ระบบบันทึกและติดตามการใช้น้ำ 16 จุดตรวจวัด",
@@ -14,9 +13,9 @@
   "dir": "ltr",
   "categories": ["utilities", "productivity"],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
