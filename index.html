@@ -81,19 +81,17 @@
     <div id="entryMsg" class="msg"></div>
   </div>
 
-  <!-- ───── TAB: SUMMARY ───── -->
+  <!-- ───── TAB: SUMMARY (รายงานตาราง) ───── -->
   <div id="tab-summary" class="tabpanel hidden">
     <div class="row">
       <input id="sumDate" type="date">
-      <button id="btnLoadSum" class="btn primary">ดู</button>
-      <!-- ในแท็บ Summary -->
-<div class="row">
-  <input id="sumDate" type="date">
-  <button id="btnLoadSum" class="btn primary">ดู</button>
-  <!-- เพิ่มปุ่มนี้ -->
-  <button id="btnExport" class="btn" onclick="exportSummaryAsImage()">📷 บันทึกเป็นรูป</button>
+      <button id="btnLoadSum" class="btn primary">ดูรายงาน</button>
     </div>
-    <div id="summaryBox" class="list"></div>
+    <div class="row">
+      <label class="chkline"><input type="checkbox" id="sumCompact"> ซ่อนคอลัมน์ที่ตั้ง (แสดงเฉพาะเลขมิเตอร์)</label>
+    </div>
+    <div id="summaryWrap" class="summary-wrap"></div>
+    <div id="summaryMsg" class="msg"></div>
   </div>
 
   <!-- ───── TAB: HISTORY ───── -->
@@ -156,8 +154,5 @@
 
 <div id="loading" class="loading hidden"><div class="spinner"></div></div>
 <script src="./app.js"></script>
-  <!-- ... วางไว้ท้ายสุดของไฟล์ก่อน </body> ... -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="./app.js"></script>
 </body>
 </html>
