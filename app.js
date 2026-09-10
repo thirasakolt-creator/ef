@@ -583,4 +583,29 @@ document.querySelectorAll('.tab').forEach(function (t) {
         .catch(e => console.warn('SW failed:', e));
     });
   }
-})();
+})
+/*** ══════════ ฟังก์ชันจับภาพรายงาน ══════════ ***/
+async function exportSummaryAsImage() {
+  const box = $('summaryBox');
+  if (!box || box.innerHTML === '') return alert('กรุณาโหลดข้อมูลสรุปก่อนครับ');
+
+  busy(true);
+  try {
+    // ใช้ html2canvas จับภาพ div
+    const canvas = await html2canvas(box, {
+      backgroundColor: '#ffffff',
+      scale: 2 // เพิ่มความคมชัด
+    });
+
+    // สร้างลิงก์ดาวน์โหลดอัตโนมัติ
+    const link = document.createElement('a');
+    link.download = 'Report_' + S.viewDate + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (e) {
+    alert('เกิดข้อผิดพลาดในการสร้างรูปภาพ: ' + e.message);
+  } finally {
+    busy(false);
+  }
+}
+();
