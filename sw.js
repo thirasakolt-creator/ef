@@ -1,4 +1,4 @@
-const CACHE = 'wm-v7';
+const CACHE = 'wm-v8';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js',
   './manifest.json', './icons/icon-192.png', './icons/icon-512.png'
