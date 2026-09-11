@@ -66,18 +66,17 @@
       </div>
     </div>
 
-    <div class="statbar">
-      <div class="stat"><b id="stDone">0</b><span>บันทึกแล้ว</span></div>
-      <div class="stat"><b id="stPending">0</b><span>ค้าง</span></div>
-      <div class="stat alert"><b id="stAlert">0</b><span>ผิดปกติ</span></div>
-      <div class="stat"><b id="stUsage">0</b><span>หน่วยรวม</span></div>
+    <div class="progbar">
+      <div class="progtext">
+        <span>บันทึกแล้ว <b id="stDone">0</b>/<b id="stTotal">0</b></span>
+        <span>เหลือ <b id="stPending">0</b> จุด</span>
+        <span class="pg-alert">⚠️ <b id="stAlert">0</b></span>
+      </div>
+      <div class="progtrack"><div id="progFill" class="progfill"></div></div>
     </div>
 
     <div id="queueBar" class="queuebar hidden"></div>
-    <div id="meterList" class="list"></div>
-    <div class="sticky-actions">
-      <button id="btnSubmit" class="btn primary big">บันทึกข้อมูลที่กรอก</button>
-    </div>
+    <div id="meterList" class="mlist"></div>
     <div id="entryMsg" class="msg"></div>
   </div>
 
@@ -127,6 +126,19 @@
 
   <!-- ───── TAB: ADMIN ───── -->
   <div id="tab-admin" class="tabpanel hidden">
+    <div class="adminbox danger">
+      <div class="adminbox-head">🔓 ปลดล็อกทั้งวัน (ล้างข้อมูล)</div>
+      <p class="danger-note">
+        ล้างข้อมูลการจดของวันที่เลือก <b>ทุกจุด ทุกรอบ</b> เพื่อเริ่มกรอกใหม่<br>
+        ข้อมูลเดิมจะถูกทำเครื่องหมายยกเลิกไว้ในระบบ ไม่ถูกลบถาวร
+      </p>
+      <div class="row">
+        <input id="resetDate" type="date">
+        <button id="btnResetDay" class="btn danger">ปลดล็อกทั้งวัน</button>
+      </div>
+      <div id="resetMsg" class="msg"></div>
+    </div>
+
     <div class="adminbox">
       <div class="adminbox-head">👥 จัดการผู้ใช้งาน</div>
       <div class="row">
@@ -137,11 +149,11 @@
     </div>
 
     <div class="adminbox">
-      <div class="adminbox-head">🔓 สิทธิ์พิเศษของผู้ดูแล</div>
+      <div class="adminbox-head">📖 คำอธิบายสิทธิ์ผู้ดูแล</div>
       <ul class="tips">
         <li>บันทึกได้ตลอดเวลา และเลือกวันที่ย้อนหลังได้</li>
-        <li><b>ปลดล็อก</b> — บันทึกรอบใหม่ หลักหน้ารันเพิ่มตามปกติ<br><small>เช่น 144 กรอก 40 → <b>240</b></small></li>
-        <li><b>แก้ไข</b> — แก้เฉพาะเลขท้าย หลักหน้าคงเดิม<br><small>เช่น 144 แก้เป็น 40 → <b>140</b></small></li>
+        <li><b>✏️ แก้ไข</b> — แก้เฉพาะเลขท้าย หลักหน้าคงเดิม<br><small>เช่น 144 แก้เป็น 40 → <b>140</b></small></li>
+        <li><b>🔓 ปลดล็อก</b> — บันทึกรอบใหม่ หลักหน้ารันเพิ่ม<br><small>เช่น 144 กรอก 40 → <b>240</b></small></li>
       </ul>
     </div>
   </div>
@@ -171,6 +183,24 @@
     <input id="umNote" type="text" placeholder="">
     <button id="umSave" class="btn primary big">บันทึกผู้ใช้</button>
     <div id="umMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL: ยืนยันล้างข้อมูล ══════════ -->
+<div id="resetModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <b>⚠️ ยืนยันครั้งสุดท้าย</b>
+      <button class="btn ghost small" id="rmClose">✕</button>
+    </div>
+    <p class="danger-note">
+      กำลังจะล้างข้อมูลของวันที่ <b id="rmDate"></b><br>
+      จำนวน <b id="rmCount"></b> จุดที่บันทึกไว้<br><br>
+      พิมพ์คำว่า <b>ยืนยัน</b> เพื่อดำเนินการต่อ
+    </p>
+    <input id="rmText" type="text" placeholder="พิมพ์: ยืนยัน" autocomplete="off">
+    <button id="rmGo" class="btn danger big">ล้างข้อมูลทั้งวัน</button>
+    <div id="rmMsg" class="msg"></div>
   </div>
 </div>
 
