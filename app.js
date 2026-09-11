@@ -8,7 +8,8 @@ const CONFIG = {
 const S = {
   user: null, day: null, meters: [],
   bizDate: '', viewDate: '',
-  unlocked: {}, editing: {},
+  openId: null,          // การ์ดที่เปิดอยู่ (ทีละ 1)
+  openMode: 'NEW',       // NEW | EDIT | UNLOCK
   reportData: null, reportBlob: null
 };
 
@@ -31,8 +32,8 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
 
 const fmt = (n, len) => (n === null || n === '' || n === undefined) ? '-' : String(n).padStart(len || 0, '0');
 const pillOf = s => s === 'ALERT' ? 'red' : s === 'REVIEW' ? 'crit' : s === 'INITIAL' ? 'init' : 'green';
-const labelOf = s => s === 'ALERT' ? 'สูงกว่าปกติ' : s === 'REVIEW' ? 'ต้องตรวจสอบ' : s === 'INITIAL' ? 'ตั้งต้น' : 'ปกติ';
 const nameOf = id => { const m = S.meters.find(x => x.meterId === id); return m ? m.meterName : id; };
+const itemOf = id => S.day.items.find(x => x.meterId === id);
 
 function busy(on) { $('loading').classList.toggle('hidden', !on); }
 
@@ -100,6 +101,7 @@ async function start() {
   $('userName').textContent = S.user.displayName + ' (' + S.user.role + ')';
   $('sumDate').value = boot.businessDate;
   $('entryDate').value = boot.businessDate;
+  $('resetDate').value = boot.businessDate;
   $('hisMeter').innerHTML = '<option value="">ทุกจุด</option>' +
     S.meters.map(m => '<option value="' + m.meterId + '">' + m.meterName + '</option>').join('');
 
@@ -115,208 +117,240 @@ async function start() {
 }
 
 /*** ══════════ LOAD DAY ══════════ ***/
-async function loadDay() {
+async function loadDay(keepOpen) {
   busy(true);
   try {
     S.day = await api('getDay', { date: S.viewDate });
-    S.editing = {};
+    if (!keepOpen) { S.openId = null; S.openMode = 'NEW'; }
     renderMeters();
-    renderStats(S.day.stats);
+    renderProgress(S.day.stats);
   } catch (e) { msg('entryMsg', e.message, 'err'); }
   finally { busy(false); }
 }
 
-function renderStats(st) {
+function renderProgress(st) {
   $('stDone').textContent = st.submitted;
+  $('stTotal').textContent = st.total;
   $('stPending').textContent = st.pending;
   $('stAlert').textContent = st.alert;
-  $('stUsage').textContent = st.totalUsage;
+  const pct = st.total ? Math.round(st.submitted / st.total * 100) : 0;
+  $('progFill').style.width = pct + '%';
 }
 
 $('btnLoadEntryDate').onclick = async function () {
   S.viewDate = $('entryDate').value || S.bizDate;
-  S.unlocked = {};
   await loadDay();
 };
 $('btnTodayEntry').onclick = async function () {
   S.viewDate = S.bizDate;
   $('entryDate').value = S.bizDate;
-  S.unlocked = {};
   await loadDay();
 };
 
-/*** ══════════ RENDER METERS ══════════ ***/
+/*** ══════════ RENDER: การ์ดคอลัมน์เดียว + Dropdown ══════════ ***/
 function renderMeters() {
   const back = S.viewDate !== S.bizDate;
-  $('meterList').innerHTML =
-    (back ? '<div class="backdate">📅 กำลังดูวันที่ ' + S.viewDate + ' (ไม่ใช่วันปัจจุบัน)</div>' : '') +
-    S.day.items.map(function (it) {
-      const id = it.meterId;
+  let h = back ? '<div class="backdate">📅 กำลังดูวันที่ ' + S.viewDate + '</div>' : '';
+  h += S.day.items.map(function (it, i) { return cardHtml(it, i); }).join('');
+  $('meterList').innerHTML = h;
 
-      if (it.submitted && S.editing[id]) {
-        const prefix = String(Math.floor(it.fullReading / Math.pow(10, it.inputDigits)));
-        return '<div class="card editmode">' +
-          '<div class="card-head"><b>' + it.meterName + '</b><span class="pill edit">✏️ โหมดแก้ไข</span></div>' +
-          '<div class="card-body">' +
-            '<div class="hint">แก้เฉพาะ ' + it.inputDigits + ' หลักท้าย · หลักหน้า <b>' + prefix + '</b> คงเดิม ไม่รันเพิ่ม</div>' +
-            '<div class="input-row">' +
-              '<span class="prefix">' + prefix + '</span>' +
-              '<input class="eval" data-id="' + id + '" type="tel" inputmode="numeric" maxlength="' + it.inputDigits + '" value="' + it.inputValue + '">' +
-            '</div>' +
-            '<div class="preview" id="epv-' + id + '"></div>' +
-            '<div class="row">' +
-              '<button class="btn primary" data-act="saveEdit" data-id="' + id + '">บันทึกการแก้ไข</button>' +
-              '<button class="btn" data-act="cancelEdit" data-id="' + id + '">ยกเลิก</button>' +
-            '</div>' +
-          '</div></div>';
-      }
-
-      if (it.submitted && !S.unlocked[id]) {
-        return '<div class="card done">' +
-          '<div class="card-head"><b>' + it.meterName + '</b>' +
-          '<span class="pill ' + pillOf(it.status) + '">' + labelOf(it.status) + '</span></div>' +
-          '<div class="card-body">' +
-            '<div class="kv"><span>เลขเต็ม</span><b>' + fmt(it.fullReading, it.digitLength) + '</b></div>' +
-            '<div class="kv"><span>ใช้ไป</span><b>' + it.usageUnits + ' หน่วย</b></div>' +
-            '<div class="kv muted"><span>โดย</span><span>' + it.submittedBy + '</span></div>' +
-            (it.entryCount > 1 ? '<div class="kv muted"><span>บันทึกวันนี้</span><span>' + it.entryCount + ' ครั้ง</span></div>' : '') +
-            (isAdmin() ?
-              '<div class="row admin-actions">' +
-                '<button class="btn small" data-act="edit" data-id="' + id + '">✏️ แก้ไขเลข</button>' +
-                '<button class="btn small warn" data-act="unlock" data-id="' + id + '">🔓 ปลดล็อก</button>' +
-              '</div>' : '') +
-          '</div></div>';
-      }
-
-      const isInit = !it.hasBaseline;
-      const un = !!S.unlocked[id];
-      return '<div class="card' + (un ? ' unlocked' : '') + '">' +
-        '<div class="card-head"><b>' + it.meterName + '</b>' +
-        '<span class="pill ' + (un ? 'unlock' : isInit ? 'init' : 'gray') + '">' +
-          (un ? '🔓 รอบเพิ่ม' : isInit ? 'ตั้งค่าเริ่มต้น' : 'ครั้งก่อน ' + fmt(it.previousReading, it.digitLength)) +
-        '</span></div>' +
-        '<div class="card-body">' +
-          (un ? '<div class="hint">ฐานคำนวณ <b>' + fmt(it.fullReading, it.digitLength) + '</b> · หลักหน้าจะรันเพิ่มตามปกติ</div>' : '') +
-          '<div class="input-row">' +
-            '<input class="mval" data-id="' + id + '" type="tel" inputmode="numeric" maxlength="' +
-              (isInit ? it.digitLength : it.inputDigits) + '" placeholder="' +
-              (isInit ? 'เลขเต็ม ' + it.digitLength + ' หลัก' : it.inputDigits + ' หลักท้าย') + '">' +
-            '<label class="fullchk"><input type="checkbox" class="mfull" data-id="' + id + '"' +
-              (isInit ? ' checked disabled' : '') + '> เลขเต็ม</label>' +
-          '</div>' +
-          '<div class="preview" id="pv-' + id + '"></div>' +
-          (un ? '<button class="btn small" data-act="cancelUnlock" data-id="' + id + '">ยกเลิกการปลดล็อก</button>' : '') +
-        '</div></div>';
-    }).join('');
-
-  document.querySelectorAll('.mval').forEach(el => el.addEventListener('input', onInput));
-  document.querySelectorAll('.eval').forEach(el => {
-    el.addEventListener('input', onEditInput);
-    onEditInput({ target: el });
-  });
-  document.querySelectorAll('.mfull').forEach(el => el.addEventListener('change', function (e) {
-    const id = e.target.dataset.id;
-    const it = S.day.items.find(x => x.meterId === id);
-    const inp = document.querySelector('.mval[data-id="' + id + '"]');
-    inp.maxLength = e.target.checked ? it.digitLength : it.inputDigits;
-    inp.placeholder = e.target.checked ? 'เลขเต็ม ' + it.digitLength + ' หลัก' : it.inputDigits + ' หลักท้าย';
-    inp.value = '';
-    onInput({ target: inp });
-  }));
+  const inp = document.querySelector('.mc-input');
+  if (inp) { inp.addEventListener('input', onCardInput); setTimeout(() => inp.focus(), 60); }
+  const chk = document.querySelector('.mc-full');
+  if (chk) chk.addEventListener('change', onFullToggle);
 }
 
-$('meterList').addEventListener('click', function (e) {
-  const btn = e.target.closest('[data-act]');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  switch (btn.dataset.act) {
-    case 'edit':         S.editing[id] = true; renderMeters(); break;
-    case 'cancelEdit':   delete S.editing[id]; renderMeters(); break;
-    case 'unlock':       unlockMeter(id); break;
-    case 'cancelUnlock': delete S.unlocked[id]; renderMeters(); break;
-    case 'saveEdit':     saveEdit(id); break;
+function cardHtml(it, idx) {
+  const id = it.meterId;
+  const open = S.openId === id;
+  const mode = open ? S.openMode : null;
+  const locked = it.submitted && !open;
+
+  let cls = 'mcard';
+  if (open) cls += ' open';
+  if (it.submitted) cls += ' saved';
+  if (mode === 'EDIT') cls += ' m-edit';
+  if (mode === 'UNLOCK') cls += ' m-unlock';
+
+  /* ── หัวการ์ด ── */
+  let right = '';
+  if (it.submitted) {
+    right = '<span class="mc-val">' + fmt(it.fullReading, it.digitLength) + '</span>';
+    if (isAdmin() && !open) {
+      right += '<button class="mc-ab" data-act="edit" data-id="' + id + '" title="แก้ไขเลข">✏️</button>' +
+               '<button class="mc-ab" data-act="unlock" data-id="' + id + '" title="ปลดล็อกบันทึกใหม่">🔓</button>';
+    }
+    if (open) right += '<button class="mc-ab" data-act="close" data-id="' + id + '">✕</button>';
+  } else {
+    right = '<span class="mc-wait">' + (it.hasBaseline ? 'รอบันทึก' : 'ตั้งต้น') + '</span>' +
+            '<span class="mc-arrow">' + (open ? '▲' : '▼') + '</span>';
   }
+
+  let html = '<div class="' + cls + '">';
+  html += '<div class="mc-head"' + (locked ? '' : ' data-act="toggle" data-id="' + id + '"') + '>' +
+            '<span class="mc-no">' + (idx + 1) + '</span>' +
+            '<div class="mc-title"><b>' + it.meterName + '</b>' +
+              (it.location ? '<small>' + it.location + '</small>' : '') +
+            '</div>' +
+            '<div class="mc-right">' + right + '</div>' +
+          '</div>';
+
+  /* ── เนื้อหา Dropdown ── */
+  if (open) {
+    const isInit = !it.hasBaseline;
+    let hint = '', prefix = '', value = '', maxlen = it.inputDigits, btnText = 'บันทึก';
+
+    if (mode === 'EDIT') {
+      prefix = String(Math.floor(it.fullReading / Math.pow(10, it.inputDigits)));
+      value = it.inputValue;
+      hint = 'โหมดแก้ไข — หลักหน้า <b>' + prefix + '</b> คงเดิม ไม่รันเพิ่ม';
+      btnText = 'บันทึกการแก้ไข';
+    } else if (mode === 'UNLOCK') {
+      hint = 'โหมดปลดล็อก — ฐานคำนวณ <b>' + fmt(it.fullReading, it.digitLength) + '</b> หลักหน้ารันเพิ่มปกติ';
+      btnText = 'บันทึกรอบใหม่';
+    } else if (isInit) {
+      maxlen = it.digitLength;
+      hint = 'ครั้งแรก — กรอกเลขเต็ม ' + it.digitLength + ' หลัก';
+    } else {
+      hint = 'ครั้งก่อน <b>' + fmt(it.previousReading, it.digitLength) + '</b> · กรอก ' + it.inputDigits + ' หลักท้าย';
+    }
+
+    html += '<div class="mc-body">' +
+              '<div class="mc-hint">' + hint + '</div>' +
+              '<div class="mc-inrow">' +
+                (mode === 'EDIT' ? '<span class="mc-prefix">' + prefix + '</span>' : '') +
+                '<input class="mc-input" data-id="' + id + '" data-mode="' + mode + '" type="tel" ' +
+                  'inputmode="numeric" maxlength="' + maxlen + '" value="' + value + '" ' +
+                  'placeholder="' + (maxlen > 3 ? 'เลขเต็ม' : maxlen + ' หลัก') + '">' +
+                '<button class="btn primary mc-save" data-act="save" data-id="' + id + '">' + btnText + '</button>' +
+              '</div>';
+
+    if (mode === 'NEW' && !isInit) {
+      html += '<label class="mc-fullchk"><input type="checkbox" class="mc-full" data-id="' + id + '"> กรอกเลขเต็มแทน</label>';
+    }
+    html += '<div class="mc-preview" id="pv-' + id + '"></div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+/*** ══════════ CLICK HANDLER ══════════ ***/
+$('meterList').addEventListener('click', function (e) {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act, id = el.dataset.id;
+
+  if (act === 'toggle') {
+    const it = itemOf(id);
+    if (it.submitted) return;
+    if (S.openId === id) { S.openId = null; }
+    else { S.openId = id; S.openMode = 'NEW'; }
+    renderMeters();
+  }
+  else if (act === 'edit')   { S.openId = id; S.openMode = 'EDIT';   renderMeters(); }
+  else if (act === 'unlock') { S.openId = id; S.openMode = 'UNLOCK'; renderMeters(); }
+  else if (act === 'close')  { S.openId = null; renderMeters(); }
+  else if (act === 'save')   { saveCard(id); }
 });
 
-function unlockMeter(id) {
-  if (!confirm('ปลดล็อกเพื่อบันทึกรอบใหม่?\n\nหลักหน้าจะรันเพิ่มตามปกติ\nเช่น 144 กรอก 40 → 240')) return;
-  S.unlocked[id] = true;
-  renderMeters();
+function onFullToggle(e) {
+  const id = e.target.dataset.id;
+  const it = itemOf(id);
+  const inp = document.querySelector('.mc-input');
+  inp.maxLength = e.target.checked ? it.digitLength : it.inputDigits;
+  inp.placeholder = e.target.checked ? 'เลขเต็ม' : it.inputDigits + ' หลัก';
+  inp.value = '';
+  inp.dataset.full = e.target.checked ? '1' : '';
+  onCardInput({ target: inp });
+  inp.focus();
 }
 
 /*** ══════════ PREVIEW ══════════ ***/
-function onInput(e) {
-  const id = e.target.dataset.id;
-  const it = S.day.items.find(x => x.meterId === id);
+function onCardInput(e) {
+  const inp = e.target;
+  const id = inp.dataset.id, mode = inp.dataset.mode;
+  const it = itemOf(id);
   const pv = $('pv-' + id);
-  const raw = e.target.value.replace(/\D/g, '');
-  e.target.value = raw;
-  if (!raw) { pv.innerHTML = ''; pv.className = 'preview'; return; }
+  const raw = inp.value.replace(/\D/g, '');
+  inp.value = raw;
+  if (!raw) { pv.innerHTML = ''; pv.className = 'mc-preview'; return; }
 
-  const isFull = document.querySelector('.mfull[data-id="' + id + '"]').checked;
-  const base = S.unlocked[id] ? it.fullReading : it.previousReading;
-  let full, usage;
-  if (isFull) {
-    full = Number(raw);
-    usage = it.hasBaseline ? calcUsage(base, full, it.digitLength) : 0;
+  let full, usage, bad = false;
+
+  if (mode === 'EDIT') {
+    const b = Math.pow(10, it.inputDigits);
+    full = Math.floor(it.fullReading / b) * b + Number(raw);
+    usage = full - it.previousReading;
+    bad = usage < 0;
   } else {
-    full = computeFull(base, Number(raw), it.inputDigits, it.digitLength);
-    usage = calcUsage(base, full, it.digitLength);
+    const base = mode === 'UNLOCK' ? it.fullReading : it.previousReading;
+    const useFull = inp.dataset.full === '1' || !it.hasBaseline;
+    if (useFull) {
+      full = Number(raw);
+      usage = it.hasBaseline ? calcUsage(base, full, it.digitLength) : 0;
+    } else {
+      full = computeFull(base, Number(raw), it.inputDigits, it.digitLength);
+      usage = calcUsage(base, full, it.digitLength);
+    }
   }
 
-  const over = it.hardLimit && usage > it.hardLimit;
-  const warn = !over && it.normalLimit && usage > it.normalLimit;
-  pv.className = 'preview ' + (over ? 'critical' : warn ? 'warn' : 'ok');
+  const over = !bad && it.hardLimit && usage > it.hardLimit;
+  const warn = !bad && !over && it.normalLimit && usage > it.normalLimit;
+  pv.className = 'mc-preview ' + (bad || over ? 'critical' : warn ? 'warn' : 'ok');
   pv.innerHTML = '<b>' + fmt(full, it.digitLength) + '</b> · ใช้ <b>' + usage + '</b> หน่วย ' +
-    (over ? '⛔ สูงผิดปกติมาก ต้องยืนยัน' : warn ? '🔴 สูงกว่าเกณฑ์ ' + it.normalLimit : '🟢 ปกติ');
+    (bad ? '⛔ ติดลบ ตรวจสอบอีกครั้ง'
+         : over ? '⛔ สูงผิดปกติมาก'
+         : warn ? '🔴 สูงกว่าเกณฑ์ ' + it.normalLimit
+         : '🟢 ปกติ');
 }
 
-function onEditInput(e) {
-  const id = e.target.dataset.id;
-  const it = S.day.items.find(x => x.meterId === id);
-  const pv = $('epv-' + id);
-  const raw = e.target.value.replace(/\D/g, '');
-  e.target.value = raw;
-  if (!raw) { pv.innerHTML = ''; pv.className = 'preview'; return; }
+/*** ══════════ SAVE ทีละการ์ด ══════════ ***/
+async function saveCard(id) {
+  const it = itemOf(id);
+  const inp = document.querySelector('.mc-input');
+  const raw = inp.value.replace(/\D/g, '');
+  if (!raw) return msg('entryMsg', 'กรุณากรอกตัวเลข', 'err');
+  const mode = inp.dataset.mode;
 
-  const b = Math.pow(10, it.inputDigits);
-  const newFull = Math.floor(it.fullReading / b) * b + Number(raw);
-  const usage = newFull - it.previousReading;
-  const bad = usage < 0;
-  const over = !bad && it.normalLimit && usage > it.normalLimit;
-  pv.className = 'preview ' + (bad ? 'critical' : over ? 'warn' : 'ok');
-  pv.innerHTML = 'เดิม ' + fmt(it.fullReading, it.digitLength) + ' → ใหม่ <b>' +
-    fmt(newFull, it.digitLength) + '</b> · ใช้ <b>' + usage + '</b> หน่วย ' +
-    (bad ? '⛔ ติดลบ ตรวจสอบอีกครั้ง' : over ? '🔴 สูงกว่าเกณฑ์' : '🟢 ปกติ');
-}
+  /* ── โหมดแก้ไข ── */
+  if (mode === 'EDIT') {
+    busy(true);
+    try {
+      const r = await api('editReading', { readingId: it.readingId, value: raw, mode: 'SUFFIX' });
+      S.openId = null;
+      msg('entryMsg', it.meterName + ': แก้เป็น ' + r.fullReading + ' (' + r.usageUnits + ' หน่วย)', 'ok');
+      await loadDay();
+    } catch (e) { msg('entryMsg', e.message, 'err'); }
+    finally { busy(false); }
+    return;
+  }
 
-/*** ══════════ SUBMIT ══════════ ***/
-$('btnSubmit').onclick = async function () {
-  const entries = [];
-  document.querySelectorAll('.mval').forEach(function (inp) {
-    const v = inp.value.replace(/\D/g, '');
-    if (!v) return;
-    const id = inp.dataset.id;
-    entries.push({
-      readingId: uuid(), meterId: id, value: v,
-      mode: document.querySelector('.mfull[data-id="' + id + '"]').checked ? 'FULL' : 'SUFFIX',
-      force: !!S.unlocked[id],
-      source: navigator.onLine ? 'ONLINE' : 'OFFLINE_SYNC'
-    });
-  });
-  if (!entries.length) return msg('entryMsg', 'ยังไม่ได้กรอกข้อมูล', 'err');
+  /* ── โหมดบันทึกใหม่ / ปลดล็อก ── */
+  const entry = {
+    readingId: uuid(),
+    meterId: id,
+    value: raw,
+    mode: (inp.dataset.full === '1' || !it.hasBaseline) ? 'FULL' : 'SUFFIX',
+    force: mode === 'UNLOCK',
+    source: navigator.onLine ? 'ONLINE' : 'OFFLINE_SYNC'
+  };
 
   if (!navigator.onLine) {
     const q = LS.q;
-    q.push({ date: S.viewDate, entries: entries });
+    q.push({ date: S.viewDate, entries: [entry] });
     LS.q = q;
+    S.openId = null;
     renderQueue();
-    return msg('entryMsg', 'บันทึกในเครื่องแล้ว รอส่งเมื่อกลับมาออนไลน์', 'warn');
+    renderMeters();
+    return msg('entryMsg', 'บันทึกในเครื่องแล้ว รอส่งเมื่อออนไลน์', 'warn');
   }
-  await send(S.viewDate, entries, false);
-};
 
-async function send(date, entries, confirmed) {
+  await sendEntries(S.viewDate, [entry], false);
+}
+
+async function sendEntries(date, entries, confirmed) {
   busy(true);
   try {
     const r = await api('submitReadings', {
@@ -324,41 +358,28 @@ async function send(date, entries, confirmed) {
       entries: entries.map(e => Object.assign({}, e, { confirmed: !!confirmed }))
     });
 
-    const needConfirm = r.results.filter(x => x.needConfirm);
-    const failed = r.results.filter(x => !x.ok && !x.needConfirm);
-    r.results.filter(x => x.ok).forEach(x => { delete S.unlocked[x.meterId]; });
+    const need = r.results.filter(x => x.needConfirm);
+    const fail = r.results.filter(x => !x.ok && !x.needConfirm);
 
-    if (needConfirm.length) {
-      const txt = needConfirm.map(x => '• ' + nameOf(x.meterId) + ': ' + x.previewUsage + ' หน่วย').join('\n');
-      if (confirm('พบค่าสูงกว่าเกณฑ์:\n' + txt + '\n\nยืนยันบันทึกหรือไม่?')) {
-        const retry = entries.filter(e => needConfirm.some(n => n.meterId === e.meterId));
-        busy(false);
-        return await send(date, retry, true);
+    if (need.length) {
+      const txt = need.map(x => nameOf(x.meterId) + ': ' + x.previewUsage + ' หน่วย').join('\n');
+      busy(false);
+      if (confirm('ค่าสูงกว่าเกณฑ์\n\n' + txt + '\n\nยืนยันบันทึกหรือไม่?')) {
+        return await sendEntries(date, entries, true);
       }
+      return;
     }
 
-    if (failed.length) {
-      msg('entryMsg', 'ไม่สำเร็จ: ' + failed.map(f => nameOf(f.meterId) + ' — ' + f.error).join(' | '), 'err');
+    if (fail.length) {
+      msg('entryMsg', fail.map(f => nameOf(f.meterId) + ' — ' + f.error).join(' | '), 'err');
     } else if (r.saved) {
-      msg('entryMsg', 'บันทึกสำเร็จ ' + r.saved + ' จุด', 'ok');
+      const ok = r.results.filter(x => x.ok)[0];
+      msg('entryMsg', '✅ ' + nameOf(ok.meterId) + ' บันทึกแล้ว · ' + ok.fullReading +
+                      ' (' + ok.usageUnits + ' หน่วย)', 'ok');
+      S.openId = null;
     }
-    await loadDay();
+    await loadDay(true);
   } catch (e) { msg('entryMsg', e.message, 'err'); }
-  finally { busy(false); }
-}
-
-async function saveEdit(id) {
-  const it = S.day.items.find(x => x.meterId === id);
-  const el = document.querySelector('.eval[data-id="' + id + '"]');
-  const val = el.value.replace(/\D/g, '');
-  if (!val) return alert('กรุณากรอกตัวเลข');
-  busy(true);
-  try {
-    const r = await api('editReading', { readingId: it.readingId, value: val, mode: 'SUFFIX' });
-    delete S.editing[id];
-    msg('entryMsg', 'แก้ไขสำเร็จ: ' + r.oldFull + ' → ' + r.fullReading + ' (' + r.usageUnits + ' หน่วย)', 'ok');
-    await loadDay();
-  } catch (e) { alert(e.message); }
   finally { busy(false); }
 }
 
@@ -366,7 +387,7 @@ async function saveEdit(id) {
 function renderQueue() {
   const q = LS.q, bar = $('queueBar');
   bar.classList.toggle('hidden', !q.length);
-  if (q.length) bar.textContent = 'มี ' + q.length + ' ชุดข้อมูลรอส่ง';
+  if (q.length) bar.textContent = 'มี ' + q.length + ' รายการรอส่ง';
 }
 
 async function flushQueue() {
@@ -374,9 +395,9 @@ async function flushQueue() {
   const q = LS.q;
   if (!q.length) return;
   LS.q = [];
-  for (const batch of q) {
-    try { await send(batch.date, batch.entries, true); }
-    catch (e) { const cur = LS.q; cur.push(batch); LS.q = cur; }
+  for (const b of q) {
+    try { await sendEntries(b.date, b.entries, true); }
+    catch (e) { const c = LS.q; c.push(b); LS.q = c; }
   }
   renderQueue();
 }
@@ -384,7 +405,51 @@ async function flushQueue() {
 window.addEventListener('online', function () { $('netbar').classList.add('hidden'); flushQueue(); });
 window.addEventListener('offline', function () { $('netbar').classList.remove('hidden'); });
 
-/*** ══════════ REPORT: โหลดข้อมูล ══════════ ***/
+/*** ══════════ ADMIN: ปลดล็อกทั้งวัน ══════════ ***/
+$('btnResetDay').onclick = async function () {
+  const date = $('resetDate').value;
+  if (!date) return msg('resetMsg', 'กรุณาเลือกวันที่', 'err');
+
+  busy(true);
+  let count = 0;
+  try {
+    const d = await api('getDay', { date: date });
+    count = d.stats.submitted;
+  } catch (e) { busy(false); return msg('resetMsg', e.message, 'err'); }
+  busy(false);
+
+  if (!count) return msg('resetMsg', 'วันที่ ' + date + ' ไม่มีข้อมูลที่ต้องล้าง', 'warn');
+
+  /* ยืนยันรอบที่ 1 */
+  if (!confirm('ปลดล็อกทั้งวัน\n\nวันที่: ' + date + '\nข้อมูลที่จะถูกล้าง: ' + count + ' จุด\n\nดำเนินการต่อหรือไม่?')) return;
+
+  /* ยืนยันรอบที่ 2 */
+  $('rmDate').textContent = date;
+  $('rmCount').textContent = count;
+  $('rmText').value = '';
+  $('rmMsg').textContent = '';
+  $('resetModal').classList.remove('hidden');
+  setTimeout(() => $('rmText').focus(), 100);
+};
+
+$('rmClose').onclick = function () { $('resetModal').classList.add('hidden'); };
+
+$('rmGo').onclick = async function () {
+  const txt = $('rmText').value.trim();
+  if (txt !== 'ยืนยัน') return msg('rmMsg', 'กรุณาพิมพ์คำว่า ยืนยัน ให้ถูกต้อง', 'err');
+
+  const date = $('resetDate').value;
+  busy(true);
+  try {
+    const r = await api('voidDay', { date: date, confirmText: 'ยืนยัน' });
+    $('resetModal').classList.add('hidden');
+    msg('resetMsg', '✅ ล้างข้อมูลวันที่ ' + r.date + ' แล้ว ' + r.cleared + ' รายการ', 'ok');
+    if (S.viewDate === date) { S.openId = null; await loadDay(); }
+  } catch (e) { msg('rmMsg', e.message, 'err'); }
+  finally { busy(false); }
+};
+
+/*** ══════════ REPORT ══════════ ***/
 $('btnLoadSum').onclick = loadSummaryReport;
 $('optPad').onchange = function () { if (S.reportData) renderSummaryPreview(S.reportData); };
 $('optUsage').onchange = function () { if (S.reportData) renderSummaryPreview(S.reportData); };
@@ -413,7 +478,6 @@ function thaiHeaderDate(dateStr) {
   return { d: String(Number(p[2])), m: String(Number(p[1])), y: String((Number(p[0]) + 543) % 100).padStart(2, '0') };
 }
 
-/*** ══════════ REPORT: พรีวิว HTML ══════════ ***/
 function renderSummaryPreview(d) {
   const showUsage = $('optUsage').checked;
   const t = thaiHeaderDate(d.date);
@@ -445,7 +509,6 @@ function renderSummaryPreview(d) {
   $('summaryWrap').innerHTML = h;
 }
 
-/*** ══════════ REPORT: สร้างรูปภาพด้วย Canvas ══════════ ***/
 $('btnMakeImg').onclick = async function () {
   if (!S.reportData) return msg('summaryMsg', 'กรุณากด "ดูรายงาน" ก่อน', 'err');
   busy(true);
@@ -458,9 +521,8 @@ $('btnMakeImg').onclick = async function () {
     $('imgBox').classList.remove('hidden');
     $('imgBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
     msg('summaryMsg', 'สร้างรูปเรียบร้อย', 'ok');
-  } catch (e) {
-    msg('summaryMsg', 'สร้างรูปไม่สำเร็จ: ' + e.message, 'err');
-  } finally { busy(false); }
+  } catch (e) { msg('summaryMsg', 'สร้างรูปไม่สำเร็จ: ' + e.message, 'err'); }
+  finally { busy(false); }
 };
 
 function fitFont(ctx, text, maxW, size, weight) {
@@ -487,13 +549,12 @@ function drawReportCanvas(d) {
   const H = PAD * 2 + hDate + hTitle + hHead + hRow * items.length + hFoot;
 
   const cv = $('reportCanvas');
-  cv.width = W * SC;
-  cv.height = H * SC;
+  cv.width = W * SC; cv.height = H * SC;
   const x = cv.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0);
   x.scale(SC, SC);
   x.textBaseline = 'middle';
 
-  // พื้นหลังดำ
   x.fillStyle = '#000';
   x.fillRect(0, 0, W, H);
 
@@ -511,7 +572,6 @@ function drawReportCanvas(d) {
 
   let y = PAD;
 
-  // ── แถววันที่ ──
   x.strokeStyle = '#fff'; x.lineWidth = 3;
   x.strokeRect(L, y, IW, hDate);
   const my = y + hDate / 2;
@@ -527,14 +587,12 @@ function drawReportCanvas(d) {
   x.fillText(t.y, L + IW * 0.86, my);
   y += hDate;
 
-  // ── หัวเรื่อง ──
   x.strokeRect(L, y, IW, hTitle);
   x.textAlign = 'center';
   x.font = 'bold 28px "Noto Sans Thai","Sarabun",sans-serif';
   x.fillText('มิเตอร์น้ำ' + (round ? ' (' + round + ')' : ''), L + IW / 2, y + hTitle / 2);
   y += hTitle;
 
-  // ── หัวคอลัมน์ ──
   const headTop = y;
   x.strokeRect(L, y, IW, hHead);
   const heads = showUsage
@@ -550,7 +608,6 @@ function drawReportCanvas(d) {
   for (let i = 1; i < cx.length - 1; i++) line(cx[i], headTop, cx[i], headTop + hHead, 2);
   y += hHead;
 
-  // ── แถวข้อมูล ──
   items.forEach(function (it, idx) {
     const top = y;
     x.strokeStyle = '#fff'; x.lineWidth = 1.6;
@@ -558,39 +615,33 @@ function drawReportCanvas(d) {
     for (let i = 1; i < cx.length - 1; i++) line(cx[i], top, cx[i], top + hRow, 1.6);
     const cy = top + hRow / 2;
 
-    // ลำดับ
     x.fillStyle = '#fff'; x.textAlign = 'center';
     x.font = '25px "Noto Sans Thai","Sarabun",sans-serif';
     x.fillText(String(idx + 1), cx[0] + cw[0] / 2, cy);
 
-    // จุดที่ตั้ง
     let s = fitFont(x, it.meterName, cw[1] - 18, 25, '600');
     x.font = '600 ' + s + 'px "Noto Sans Thai","Sarabun",sans-serif';
     x.fillText(it.meterName, cx[1] + cw[1] / 2, cy);
 
-    // จุดที่ใช้น้ำ
     const loc = it.location || '';
     s = fitFont(x, loc, cw[2] - 18, 25, '600');
     x.font = '600 ' + s + 'px "Noto Sans Thai","Sarabun",sans-serif';
     x.fillText(loc, cx[2] + cw[2] / 2, cy);
 
-    // เลขมิเตอร์
     const num = readingText(it);
-    x.fillStyle = it.status === 'ALERT' || it.status === 'REVIEW' ? '#ff8f8f' : '#fff';
+    x.fillStyle = (it.status === 'ALERT' || it.status === 'REVIEW') ? '#ff8f8f' : '#fff';
     s = fitFont(x, num, cw[3] - 18, 30, 'bold');
     x.font = 'bold ' + s + 'px "Noto Sans Thai","Sarabun",sans-serif';
     x.fillText(num, cx[3] + cw[3] / 2, cy);
 
-    // ใช้ไป
     if (showUsage) {
-      x.fillStyle = it.status === 'ALERT' || it.status === 'REVIEW' ? '#ff8f8f' : '#c9d4e3';
+      x.fillStyle = (it.status === 'ALERT' || it.status === 'REVIEW') ? '#ff8f8f' : '#c9d4e3';
       x.font = '600 24px "Noto Sans Thai","Sarabun",sans-serif';
       x.fillText(it.usageUnits !== null ? String(it.usageUnits) : '', cx[4] + cw[4] / 2, cy);
     }
     y += hRow;
   });
 
-  // ── ท้ายรายงาน ──
   x.fillStyle = '#9aa7b5';
   x.textAlign = 'left';
   x.font = '20px "Noto Sans Thai","Sarabun",sans-serif';
@@ -602,7 +653,6 @@ function drawReportCanvas(d) {
   return cv;
 }
 
-/*** ══════════ REPORT: แชร์ / ดาวน์โหลด ══════════ ***/
 function reportFileName() {
   const r = $('sumRound').value;
   return 'meter_' + $('sumDate').value + (r ? '_' + r : '') + '.png';
@@ -612,9 +662,8 @@ $('btnShareImg').onclick = async function () {
   if (!S.reportBlob) return;
   const file = new File([S.reportBlob], reportFileName(), { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'รายงานมิเตอร์น้ำ ' + $('sumDate').value });
-    } catch (e) { /* ผู้ใช้ยกเลิก */ }
+    try { await navigator.share({ files: [file], title: 'รายงานมิเตอร์น้ำ ' + $('sumDate').value }); }
+    catch (e) {}
   } else {
     alert('อุปกรณ์นี้ยังไม่รองรับการแชร์ไฟล์โดยตรง\n\nกรุณากด "บันทึกรูป" แล้วส่งเข้า LINE จากคลังภาพแทนครับ');
   }
@@ -625,9 +674,7 @@ $('btnDownImg').onclick = function () {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(S.reportBlob);
   a.download = reportFileName();
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 };
 
 /*** ══════════ HISTORY ══════════ ***/
@@ -650,16 +697,15 @@ async function loadUsers() {
   try {
     const r = await api('listUsers');
     $('userList').innerHTML = r.users.map(u =>
-      '<div class="card' + (u.active ? '' : ' done') + '">' +
-        '<div class="card-head"><b>' + (u.displayName || u.email) + '</b>' +
+      '<div class="ucard' + (u.active ? '' : ' off') + '">' +
+        '<div class="uc-head"><b>' + (u.displayName || u.email) + '</b>' +
         '<span class="pill ' + (u.role === 'ADMIN' ? 'red' : u.role === 'RECORDER' ? 'green' : 'gray') + '">' + u.role + '</span></div>' +
-        '<div class="card-body">' +
-          '<div class="kv muted"><span>' + u.email + '</span><span>' + (u.active ? '🟢 ใช้งาน' : '⚪ ปิด') + '</span></div>' +
-          '<div class="row admin-actions">' +
-            '<button class="btn small" data-uact="edit" data-email="' + u.email + '">✏️ แก้ไข</button>' +
-            '<button class="btn small warn" data-uact="del" data-email="' + u.email + '">🗑 ลบ</button>' +
-          '</div>' +
-        '</div></div>').join('');
+        '<div class="uc-mail">' + u.email + ' · ' + (u.active ? '🟢 ใช้งาน' : '⚪ ปิด') + '</div>' +
+        '<div class="row admin-actions">' +
+          '<button class="btn small" data-uact="edit" data-email="' + u.email + '">✏️ แก้ไข</button>' +
+          '<button class="btn small warn" data-uact="del" data-email="' + u.email + '">🗑 ลบ</button>' +
+        '</div>' +
+      '</div>').join('');
     window.__users = r.users;
   } catch (e) { alert(e.message); } finally { busy(false); }
 }
