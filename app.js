@@ -441,7 +441,8 @@ $('rmGo').onclick = async function () {
   const date = $('resetDate').value;
   busy(true);
   try {
-    const r = await api('voidDay', { date: date, confirmText: 'ยืนยัน' });
+   const r = await api('voidDay', { date: date, confirmText: 'ยืนยัน' });
+
     $('resetModal').classList.add('hidden');
     msg('resetMsg', '✅ ล้างข้อมูลวันที่ ' + r.date + ' แล้ว ' + r.cleared + ' รายการ', 'ok');
     if (S.viewDate === date) { S.openId = null; await loadDay(); }
