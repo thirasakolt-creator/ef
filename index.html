@@ -70,10 +70,12 @@
       <div class="progtext">
         <span>บันทึกแล้ว <b id="stDone">0</b>/<b id="stTotal">0</b></span>
         <span>เหลือ <b id="stPending">0</b> จุด</span>
-        <span class="pg-alert">⚠️ <b id="stAlert">0</b></span>
+        <span><button id="btnRefresh" class="mini-btn">🔄 รีเฟรช</button></span>
       </div>
       <div class="progtrack"><div id="progFill" class="progfill"></div></div>
     </div>
+
+    <div class="tiphint">💡 จุดที่บันทึกแล้วจะซีดลง · หากต้องการแก้ไข ให้<b>แตะการ์ดนั้น 5 ครั้ง</b></div>
 
     <div id="queueBar" class="queuebar hidden"></div>
     <div id="meterList" class="mlist"></div>
@@ -149,11 +151,11 @@
     </div>
 
     <div class="adminbox">
-      <div class="adminbox-head">📖 คำอธิบายสิทธิ์ผู้ดูแล</div>
+      <div class="adminbox-head">📖 วิธีใช้งาน</div>
       <ul class="tips">
-        <li>บันทึกได้ตลอดเวลา และเลือกวันที่ย้อนหลังได้</li>
-        <li><b>✏️ แก้ไข</b> — แก้เฉพาะเลขท้าย หลักหน้าคงเดิม<br><small>เช่น 144 แก้เป็น 40 → <b>140</b></small></li>
-        <li><b>🔓 ปลดล็อก</b> — บันทึกรอบใหม่ หลักหน้ารันเพิ่ม<br><small>เช่น 144 กรอก 40 → <b>240</b></small></li>
+        <li><b>บันทึกเบื้องหลัง</b> — กดบันทึกแล้วกรอกจุดอื่นต่อได้ทันที ไม่ต้องรอ</li>
+        <li><b>แก้ไขค่า</b> — แตะการ์ดที่ซีด <b>5 ครั้ง</b> จะเปิดช่องแก้ไขพร้อมเลขเดิม</li>
+        <li><b>🔓 รอบเพิ่ม</b> (เฉพาะ Admin) — บันทึกซ้ำในวันเดิม หลักหน้ารันเพิ่ม</li>
       </ul>
     </div>
   </div>
@@ -204,6 +206,7 @@
   </div>
 </div>
 
+<div id="toast" class="toast hidden"></div>
 <canvas id="reportCanvas" class="hidden"></canvas>
 <div id="loading" class="loading hidden"><div class="spinner"></div></div>
 <script src="./app.js"></script>
