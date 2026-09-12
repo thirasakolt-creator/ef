@@ -4,12 +4,19 @@ const CONFIG = {
   API_KEY: 'omoover011'
 };
 
+const TAP_NEED = 5;        // แตะกี่ครั้งเพื่อเปิดแก้ไข
+const TAP_RESET_MS = 1600; // ถ้าหยุดแตะเกินเวลานี้ นับใหม่
+
 /*** ══════════ STATE ══════════ ***/
 const S = {
   user: null, day: null, meters: [],
   bizDate: '', viewDate: '',
-  openId: null,          // การ์ดที่เปิดอยู่ (ทีละ 1)
-  openMode: 'NEW',       // NEW | EDIT | UNLOCK
+  openId: null, openMode: 'NEW',   // NEW | EDIT | UNLOCK
+  pending: {},   // meterId -> true  (กำลังส่งเบื้องหลัง)
+  failed: {},    // meterId -> ข้อความ error
+  queued: {},    // meterId -> true  (ออฟไลน์ รอส่ง)
+  taps: {},      // meterId -> จำนวนครั้งที่แตะ
+  tapTimer: {},
   reportData: null, reportBlob: null
 };
 
@@ -43,6 +50,16 @@ function msg(el, text, kind) {
   e.textContent = text;
   e.className = 'msg ' + (kind || 'info');
   if (text) setTimeout(() => { if (e.textContent === text) e.textContent = ''; }, 7000);
+}
+
+/*** ══════════ TOAST (แจ้งเตือนไม่บล็อกหน้าจอ) ══════════ ***/
+let toastTimer = null;
+function toast(text, kind) {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = 'toast ' + (kind || 'ok');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
 }
 
 /*** ══════════ API ══════════ ***/
@@ -112,50 +129,72 @@ async function start() {
 
   $('loginView').classList.add('hidden');
   $('mainView').classList.remove('hidden');
-  await loadDay();
+  await loadDay(true);
   flushQueue();
 }
 
 /*** ══════════ LOAD DAY ══════════ ***/
-async function loadDay(keepOpen) {
-  busy(true);
+async function loadDay(showSpinner) {
+  if (showSpinner) busy(true);
   try {
     S.day = await api('getDay', { date: S.viewDate });
-    if (!keepOpen) { S.openId = null; S.openMode = 'NEW'; }
+    S.openId = null;
+    S.taps = {};
     renderMeters();
-    renderProgress(S.day.stats);
+    refreshStats();
   } catch (e) { msg('entryMsg', e.message, 'err'); }
-  finally { busy(false); }
+  finally { if (showSpinner) busy(false); }
 }
 
-function renderProgress(st) {
-  $('stDone').textContent = st.submitted;
-  $('stTotal').textContent = st.total;
-  $('stPending').textContent = st.pending;
-  $('stAlert').textContent = st.alert;
-  const pct = st.total ? Math.round(st.submitted / st.total * 100) : 0;
-  $('progFill').style.width = pct + '%';
+function refreshStats() {
+  const items = S.day ? S.day.items : [];
+  const done = items.filter(i => i.submitted).length;
+  $('stDone').textContent = done;
+  $('stTotal').textContent = items.length;
+  $('stPending').textContent = items.length - done;
+  $('progFill').style.width = (items.length ? Math.round(done / items.length * 100) : 0) + '%';
 }
 
-$('btnLoadEntryDate').onclick = async function () {
+$('btnRefresh').onclick = function () { loadDay(true); };
+$('btnLoadEntryDate').onclick = function () {
   S.viewDate = $('entryDate').value || S.bizDate;
-  await loadDay();
+  loadDay(true);
 };
-$('btnTodayEntry').onclick = async function () {
+$('btnTodayEntry').onclick = function () {
   S.viewDate = S.bizDate;
   $('entryDate').value = S.bizDate;
-  await loadDay();
+  loadDay(true);
 };
 
-/*** ══════════ RENDER: การ์ดคอลัมน์เดียว + Dropdown ══════════ ***/
+/*** ══════════ RENDER ══════════ ***/
 function renderMeters() {
   const back = S.viewDate !== S.bizDate;
   let h = back ? '<div class="backdate">📅 กำลังดูวันที่ ' + S.viewDate + '</div>' : '';
-  h += S.day.items.map(function (it, i) { return cardHtml(it, i); }).join('');
+  h += S.day.items.map((it, i) => cardHtml(it, i)).join('');
   $('meterList').innerHTML = h;
+  bindOpenCard();
+}
 
+function cardEl(id) { return document.querySelector('.mcard[data-mid="' + id + '"]'); }
+
+/* วาดใหม่เฉพาะการ์ดเดียว ไม่กระทบการ์ดอื่นที่กำลังพิมพ์อยู่ */
+function updateCard(id) {
+  const el = cardEl(id);
+  if (!el) return;
+  const idx = S.day.items.findIndex(x => x.meterId === id);
+  if (idx < 0) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHtml(S.day.items[idx], idx);
+  el.replaceWith(tmp.firstElementChild);
+  if (S.openId === id) bindOpenCard();
+}
+
+function bindOpenCard() {
   const inp = document.querySelector('.mc-input');
-  if (inp) { inp.addEventListener('input', onCardInput); setTimeout(() => inp.focus(), 60); }
+  if (!inp) return;
+  inp.addEventListener('input', onCardInput);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') saveCard(inp.dataset.id); });
+  setTimeout(() => { inp.focus(); inp.select(); }, 60);
   const chk = document.querySelector('.mc-full');
   if (chk) chk.addEventListener('change', onFullToggle);
 }
@@ -164,30 +203,41 @@ function cardHtml(it, idx) {
   const id = it.meterId;
   const open = S.openId === id;
   const mode = open ? S.openMode : null;
-  const locked = it.submitted && !open;
+  const saving = !!S.pending[id];
+  const failed = S.failed[id];
+  const queued = !!S.queued[id];
 
   let cls = 'mcard';
   if (open) cls += ' open';
-  if (it.submitted) cls += ' saved';
+  if (saving) cls += ' saving';
+  else if (failed) cls += ' failed';
+  else if (it.submitted) cls += ' saved';
   if (mode === 'EDIT') cls += ' m-edit';
   if (mode === 'UNLOCK') cls += ' m-unlock';
 
-  /* ── หัวการ์ด ── */
+  /* ── ด้านขวาของหัวการ์ด ── */
   let right = '';
-  if (it.submitted) {
+  if (saving) {
+    right = '<span class="mc-dot"></span><span class="mc-tag save">กำลังบันทึก</span>';
+  } else if (failed) {
+    right = '<span class="mc-tag err">ไม่สำเร็จ</span>' +
+            '<button class="mc-ab" data-act="retry" data-id="' + id + '">ลองใหม่</button>';
+  } else if (it.submitted) {
+    const left = TAP_NEED - (S.taps[id] || 0);
     right = '<span class="mc-val">' + fmt(it.fullReading, it.digitLength) + '</span>';
+    if (queued) right += '<span class="mc-tag q">☁️ รอส่ง</span>';
+    if (S.taps[id]) right += '<span class="mc-tap">แตะอีก ' + left + '</span>';
     if (isAdmin() && !open) {
-      right += '<button class="mc-ab" data-act="edit" data-id="' + id + '" title="แก้ไขเลข">✏️</button>' +
-               '<button class="mc-ab" data-act="unlock" data-id="' + id + '" title="ปลดล็อกบันทึกใหม่">🔓</button>';
+      right += '<button class="mc-ab" data-act="unlock" data-id="' + id + '" title="บันทึกรอบเพิ่ม">🔓</button>';
     }
     if (open) right += '<button class="mc-ab" data-act="close" data-id="' + id + '">✕</button>';
   } else {
-    right = '<span class="mc-wait">' + (it.hasBaseline ? 'รอบันทึก' : 'ตั้งต้น') + '</span>' +
+    right = '<span class="mc-tag wait">' + (it.hasBaseline ? 'รอบันทึก' : 'ตั้งต้น') + '</span>' +
             '<span class="mc-arrow">' + (open ? '▲' : '▼') + '</span>';
   }
 
-  let html = '<div class="' + cls + '">';
-  html += '<div class="mc-head"' + (locked ? '' : ' data-act="toggle" data-id="' + id + '"') + '>' +
+  let html = '<div class="' + cls + '" data-mid="' + id + '">';
+  html += '<div class="mc-head" data-act="head" data-id="' + id + '">' +
             '<span class="mc-no">' + (idx + 1) + '</span>' +
             '<div class="mc-title"><b>' + it.meterName + '</b>' +
               (it.location ? '<small>' + it.location + '</small>' : '') +
@@ -195,18 +245,18 @@ function cardHtml(it, idx) {
             '<div class="mc-right">' + right + '</div>' +
           '</div>';
 
-  /* ── เนื้อหา Dropdown ── */
+  /* ── Dropdown ── */
   if (open) {
     const isInit = !it.hasBaseline;
-    let hint = '', prefix = '', value = '', maxlen = it.inputDigits, btnText = 'บันทึก';
+    let hint = '', value = '', maxlen = it.inputDigits, btnText = 'บันทึก';
 
     if (mode === 'EDIT') {
-      prefix = String(Math.floor(it.fullReading / Math.pow(10, it.inputDigits)));
-      value = it.inputValue;
-      hint = 'โหมดแก้ไข — หลักหน้า <b>' + prefix + '</b> คงเดิม ไม่รันเพิ่ม';
-      btnText = 'บันทึกการแก้ไข';
+      value = String(it.fullReading);
+      maxlen = it.digitLength;
+      hint = 'แก้ไขค่าที่บันทึกไว้ — ลบแล้วพิมพ์เลขเต็มใหม่ได้เลย<br>ครั้งก่อน <b>' + fmt(it.previousReading, it.digitLength) + '</b>';
+      btnText = 'บันทึกแก้ไข';
     } else if (mode === 'UNLOCK') {
-      hint = 'โหมดปลดล็อก — ฐานคำนวณ <b>' + fmt(it.fullReading, it.digitLength) + '</b> หลักหน้ารันเพิ่มปกติ';
+      hint = 'บันทึกรอบเพิ่ม — ฐาน <b>' + fmt(it.fullReading, it.digitLength) + '</b> หลักหน้ารันเพิ่มปกติ';
       btnText = 'บันทึกรอบใหม่';
     } else if (isInit) {
       maxlen = it.digitLength;
@@ -218,7 +268,6 @@ function cardHtml(it, idx) {
     html += '<div class="mc-body">' +
               '<div class="mc-hint">' + hint + '</div>' +
               '<div class="mc-inrow">' +
-                (mode === 'EDIT' ? '<span class="mc-prefix">' + prefix + '</span>' : '') +
                 '<input class="mc-input" data-id="' + id + '" data-mode="' + mode + '" type="tel" ' +
                   'inputmode="numeric" maxlength="' + maxlen + '" value="' + value + '" ' +
                   'placeholder="' + (maxlen > 3 ? 'เลขเต็ม' : maxlen + ' หลัก') + '">' +
@@ -228,32 +277,57 @@ function cardHtml(it, idx) {
     if (mode === 'NEW' && !isInit) {
       html += '<label class="mc-fullchk"><input type="checkbox" class="mc-full" data-id="' + id + '"> กรอกเลขเต็มแทน</label>';
     }
-    html += '<div class="mc-preview" id="pv-' + id + '"></div>';
-    html += '</div>';
+    html += '<div class="mc-preview" id="pv-' + id + '"></div></div>';
   }
 
   html += '</div>';
   return html;
 }
 
-/*** ══════════ CLICK HANDLER ══════════ ***/
+/*** ══════════ CLICK / TAP ══════════ ***/
 $('meterList').addEventListener('click', function (e) {
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act, id = el.dataset.id;
 
-  if (act === 'toggle') {
-    const it = itemOf(id);
-    if (it.submitted) return;
-    if (S.openId === id) { S.openId = null; }
-    else { S.openId = id; S.openMode = 'NEW'; }
-    renderMeters();
-  }
-  else if (act === 'edit')   { S.openId = id; S.openMode = 'EDIT';   renderMeters(); }
-  else if (act === 'unlock') { S.openId = id; S.openMode = 'UNLOCK'; renderMeters(); }
-  else if (act === 'close')  { S.openId = null; renderMeters(); }
-  else if (act === 'save')   { saveCard(id); }
+  if (act === 'save')        { e.stopPropagation(); saveCard(id); }
+  else if (act === 'close')  { e.stopPropagation(); S.openId = null; renderMeters(); }
+  else if (act === 'unlock') { e.stopPropagation(); S.openId = id; S.openMode = 'UNLOCK'; renderMeters(); }
+  else if (act === 'retry')  { e.stopPropagation(); delete S.failed[id]; S.openId = id; S.openMode = 'NEW'; renderMeters(); }
+  else if (act === 'head')   { headTap(id); }
 });
+
+function headTap(id) {
+  const it = itemOf(id);
+  if (S.pending[id]) return;               // กำลังบันทึกอยู่ กดไม่ได้
+  if (S.failed[id]) return;
+
+  /* ยังไม่บันทึก → เปิด/ปิด dropdown ตามปกติ */
+  if (!it.submitted) {
+    S.openId = (S.openId === id) ? null : id;
+    S.openMode = 'NEW';
+    renderMeters();
+    return;
+  }
+
+  /* บันทึกแล้ว → นับจำนวนแตะ */
+  if (S.openId === id) { S.openId = null; renderMeters(); return; }
+
+  S.taps[id] = (S.taps[id] || 0) + 1;
+  clearTimeout(S.tapTimer[id]);
+
+  if (S.taps[id] >= TAP_NEED) {
+    S.taps[id] = 0;
+    S.openId = id;
+    S.openMode = 'EDIT';
+    renderMeters();
+    toast('เปิดโหมดแก้ไข: ' + it.meterName, 'info');
+    return;
+  }
+
+  S.tapTimer[id] = setTimeout(function () { S.taps[id] = 0; updateCard(id); }, TAP_RESET_MS);
+  updateCard(id);
+}
 
 function onFullToggle(e) {
   const id = e.target.dataset.id;
@@ -275,13 +349,13 @@ function onCardInput(e) {
   const pv = $('pv-' + id);
   const raw = inp.value.replace(/\D/g, '');
   inp.value = raw;
+  if (!pv) return;
   if (!raw) { pv.innerHTML = ''; pv.className = 'mc-preview'; return; }
 
   let full, usage, bad = false;
 
   if (mode === 'EDIT') {
-    const b = Math.pow(10, it.inputDigits);
-    full = Math.floor(it.fullReading / b) * b + Number(raw);
+    full = Number(raw);
     usage = full - it.previousReading;
     bad = usage < 0;
   } else {
@@ -306,88 +380,100 @@ function onCardInput(e) {
          : '🟢 ปกติ');
 }
 
-/*** ══════════ SAVE ทีละการ์ด ══════════ ***/
+/*** ══════════ SAVE เบื้องหลัง (ไม่บล็อกหน้าจอ) ══════════ ***/
+function applySaved(id, patch) {
+  const it = itemOf(id);
+  Object.assign(it, patch);
+  it.submitted = true;
+}
+
 async function saveCard(id) {
   const it = itemOf(id);
-  const inp = document.querySelector('.mc-input');
+  const inp = document.querySelector('.mcard[data-mid="' + id + '"] .mc-input');
+  if (!inp) return;
   const raw = inp.value.replace(/\D/g, '');
-  if (!raw) return msg('entryMsg', 'กรุณากรอกตัวเลข', 'err');
-  const mode = inp.dataset.mode;
+  if (!raw) { toast('กรุณากรอกตัวเลขก่อน', 'err'); return; }
 
-  /* ── โหมดแก้ไข ── */
-  if (mode === 'EDIT') {
-    busy(true);
-    try {
-      const r = await api('editReading', { readingId: it.readingId, value: raw, mode: 'SUFFIX' });
-      S.openId = null;
-      msg('entryMsg', it.meterName + ': แก้เป็น ' + r.fullReading + ' (' + r.usageUnits + ' หน่วย)', 'ok');
-      await loadDay();
-    } catch (e) { msg('entryMsg', e.message, 'err'); }
-    finally { busy(false); }
+  const mode = inp.dataset.mode;
+  const useFull = inp.dataset.full === '1' || !it.hasBaseline;
+
+  /* ปิด dropdown + ทำให้ซีดทันที ไม่ต้องรอเซิร์ฟเวอร์ */
+  S.openId = null;
+  S.pending[id] = true;
+  delete S.failed[id];
+  renderMeters();
+
+  /* ── ออฟไลน์: เก็บคิวไว้ก่อน ── */
+  if (!navigator.onLine && mode !== 'EDIT') {
+    const entry = {
+      readingId: uuid(), meterId: id, value: raw,
+      mode: useFull ? 'FULL' : 'SUFFIX',
+      force: mode === 'UNLOCK', source: 'OFFLINE_SYNC'
+    };
+    const q = LS.q; q.push({ date: S.viewDate, entries: [entry] }); LS.q = q;
+
+    const base = mode === 'UNLOCK' ? it.fullReading : it.previousReading;
+    const full = useFull ? Number(raw) : computeFull(base, Number(raw), it.inputDigits, it.digitLength);
+    delete S.pending[id];
+    S.queued[id] = true;
+    applySaved(id, { fullReading: full, usageUnits: calcUsage(base, full, it.digitLength), status: 'NORMAL', inputValue: raw });
+    updateCard(id); refreshStats(); renderQueue();
+    toast('☁️ เก็บไว้ในเครื่อง รอส่งเมื่อออนไลน์', 'warn');
     return;
   }
 
-  /* ── โหมดบันทึกใหม่ / ปลดล็อก ── */
-  const entry = {
-    readingId: uuid(),
-    meterId: id,
-    value: raw,
-    mode: (inp.dataset.full === '1' || !it.hasBaseline) ? 'FULL' : 'SUFFIX',
-    force: mode === 'UNLOCK',
-    source: navigator.onLine ? 'ONLINE' : 'OFFLINE_SYNC'
-  };
-
-  if (!navigator.onLine) {
-    const q = LS.q;
-    q.push({ date: S.viewDate, entries: [entry] });
-    LS.q = q;
-    S.openId = null;
-    renderQueue();
-    renderMeters();
-    return msg('entryMsg', 'บันทึกในเครื่องแล้ว รอส่งเมื่อออนไลน์', 'warn');
-  }
-
-  await sendEntries(S.viewDate, [entry], false);
-}
-
-async function sendEntries(date, entries, confirmed) {
-  busy(true);
   try {
-    const r = await api('submitReadings', {
-      date: date,
-      entries: entries.map(e => Object.assign({}, e, { confirmed: !!confirmed }))
-    });
+    if (mode === 'EDIT') {
+      const r = await api('editReading', { readingId: it.readingId, value: raw, mode: 'FULL' });
+      applySaved(id, {
+        fullReading: r.fullReading, usageUnits: r.usageUnits,
+        status: r.status, inputValue: raw
+      });
+      toast('✏️ ' + it.meterName + ' → ' + r.fullReading + ' (' + r.usageUnits + ' หน่วย)');
+    } else {
+      const entry = {
+        readingId: uuid(), meterId: id, value: raw,
+        mode: useFull ? 'FULL' : 'SUFFIX',
+        force: mode === 'UNLOCK', source: 'ONLINE', confirmed: false
+      };
+      let r = await api('submitReadings', { date: S.viewDate, entries: [entry] });
+      let res = r.results[0];
 
-    const need = r.results.filter(x => x.needConfirm);
-    const fail = r.results.filter(x => !x.ok && !x.needConfirm);
-
-    if (need.length) {
-      const txt = need.map(x => nameOf(x.meterId) + ': ' + x.previewUsage + ' หน่วย').join('\n');
-      busy(false);
-      if (confirm('ค่าสูงกว่าเกณฑ์\n\n' + txt + '\n\nยืนยันบันทึกหรือไม่?')) {
-        return await sendEntries(date, entries, true);
+      /* ค่าสูงกว่าเกณฑ์ → ถามยืนยันแล้วส่งซ้ำ */
+      if (res && res.needConfirm) {
+        delete S.pending[id]; updateCard(id);
+        const okc = confirm(it.meterName + '\nใช้น้ำ ' + res.previewUsage + ' หน่วย สูงกว่าเกณฑ์\n\nยืนยันบันทึกหรือไม่?');
+        if (!okc) { toast('ยกเลิกการบันทึก', 'warn'); return; }
+        S.pending[id] = true; updateCard(id);
+        entry.confirmed = true;
+        r = await api('submitReadings', { date: S.viewDate, entries: [entry] });
+        res = r.results[0];
       }
-      return;
-    }
 
-    if (fail.length) {
-      msg('entryMsg', fail.map(f => nameOf(f.meterId) + ' — ' + f.error).join(' | '), 'err');
-    } else if (r.saved) {
-      const ok = r.results.filter(x => x.ok)[0];
-      msg('entryMsg', '✅ ' + nameOf(ok.meterId) + ' บันทึกแล้ว · ' + ok.fullReading +
-                      ' (' + ok.usageUnits + ' หน่วย)', 'ok');
-      S.openId = null;
+      if (!res || !res.ok) throw new Error((res && res.error) || 'บันทึกไม่สำเร็จ');
+
+      applySaved(id, {
+        fullReading: res.fullReading, usageUnits: res.usageUnits,
+        status: res.status, readingId: res.readingId,
+        inputValue: raw, submittedBy: S.user.email
+      });
+      toast('✅ ' + it.meterName + ' · ' + res.fullReading + ' (' + res.usageUnits + ' หน่วย)');
     }
-    await loadDay(true);
-  } catch (e) { msg('entryMsg', e.message, 'err'); }
-  finally { busy(false); }
+  } catch (e) {
+    S.failed[id] = e.message;
+    toast('⚠️ ' + it.meterName + ': ' + e.message, 'err');
+  } finally {
+    delete S.pending[id];
+    updateCard(id);
+    refreshStats();
+  }
 }
 
 /*** ══════════ OFFLINE QUEUE ══════════ ***/
 function renderQueue() {
   const q = LS.q, bar = $('queueBar');
   bar.classList.toggle('hidden', !q.length);
-  if (q.length) bar.textContent = 'มี ' + q.length + ' รายการรอส่ง';
+  if (q.length) bar.textContent = '☁️ มี ' + q.length + ' รายการรอส่งเมื่อกลับมาออนไลน์';
 }
 
 async function flushQueue() {
@@ -395,11 +481,21 @@ async function flushQueue() {
   const q = LS.q;
   if (!q.length) return;
   LS.q = [];
+  let okCount = 0;
   for (const b of q) {
-    try { await sendEntries(b.date, b.entries, true); }
-    catch (e) { const c = LS.q; c.push(b); LS.q = c; }
+    try {
+      await api('submitReadings', {
+        date: b.date,
+        entries: b.entries.map(e => Object.assign({}, e, { confirmed: true }))
+      });
+      b.entries.forEach(e => { delete S.queued[e.meterId]; });
+      okCount++;
+    } catch (e) {
+      const c = LS.q; c.push(b); LS.q = c;
+    }
   }
   renderQueue();
+  if (okCount) { toast('☁️ ส่งข้อมูลค้างสำเร็จ ' + okCount + ' ชุด'); loadDay(false); }
 }
 
 window.addEventListener('online', function () { $('netbar').classList.add('hidden'); flushQueue(); });
@@ -419,11 +515,8 @@ $('btnResetDay').onclick = async function () {
   busy(false);
 
   if (!count) return msg('resetMsg', 'วันที่ ' + date + ' ไม่มีข้อมูลที่ต้องล้าง', 'warn');
-
-  /* ยืนยันรอบที่ 1 */
   if (!confirm('ปลดล็อกทั้งวัน\n\nวันที่: ' + date + '\nข้อมูลที่จะถูกล้าง: ' + count + ' จุด\n\nดำเนินการต่อหรือไม่?')) return;
 
-  /* ยืนยันรอบที่ 2 */
   $('rmDate').textContent = date;
   $('rmCount').textContent = count;
   $('rmText').value = '';
@@ -435,17 +528,14 @@ $('btnResetDay').onclick = async function () {
 $('rmClose').onclick = function () { $('resetModal').classList.add('hidden'); };
 
 $('rmGo').onclick = async function () {
-  const txt = $('rmText').value.trim();
-  if (txt !== 'ยืนยัน') return msg('rmMsg', 'กรุณาพิมพ์คำว่า ยืนยัน ให้ถูกต้อง', 'err');
-
+  if ($('rmText').value.trim() !== 'ยืนยัน') return msg('rmMsg', 'กรุณาพิมพ์คำว่า ยืนยัน ให้ถูกต้อง', 'err');
   const date = $('resetDate').value;
   busy(true);
   try {
-   const r = await api('voidDay', { date: date, confirmText: 'ยืนยัน' });
-
+    const r = await api('voidDay', { date: date, confirmText: 'ยืนยัน' });
     $('resetModal').classList.add('hidden');
     msg('resetMsg', '✅ ล้างข้อมูลวันที่ ' + r.date + ' แล้ว ' + r.cleared + ' รายการ', 'ok');
-    if (S.viewDate === date) { S.openId = null; await loadDay(); }
+    if (S.viewDate === date) { S.pending = {}; S.failed = {}; S.queued = {}; await loadDay(false); }
   } catch (e) { msg('rmMsg', e.message, 'err'); }
   finally { busy(false); }
 };
@@ -773,8 +863,7 @@ async function doInstall() {
     alert('วิธีติดตั้งด้วยตนเอง\n\n' +
           '• iPhone / iPad — กดปุ่มแชร์ แล้วเลือก "เพิ่มไปยังหน้าจอโฮม"\n' +
           '• Android — เมนู ⋮ แล้วเลือก "ติดตั้งแอป"\n' +
-          '• คอมพิวเตอร์ — ไอคอนติดตั้งท้ายแถบที่อยู่เว็บ\n\n' +
-          'หากติดตั้งไปแล้ว เมนูจะไม่แสดงอีก');
+          '• คอมพิวเตอร์ — ไอคอนติดตั้งท้ายแถบที่อยู่เว็บ');
     return;
   }
   deferredPrompt.prompt();
