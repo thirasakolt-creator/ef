@@ -1,4 +1,4 @@
-/*** ══════════ ตั้งค่า Firebase (แก้ตรงนี้ที่เดียว) ══════════ ***
+  /*** ══════════ ตั้งค่า Firebase (แก้ตรงนี้ที่เดียว) ══════════ ***
  * คัดลอกค่า firebaseConfig จาก Firebase Console:
  * Project settings → General → Your apps → SDK setup and configuration
  ***/
@@ -524,6 +524,10 @@ $('btnLogin').onclick = async function () {
 };
 
 $('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnLogin').click(); });
+$('btnTogglePin').onclick = function () {
+  const inp = $('loginPin');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+};
 $('btnLogout').onclick = function () { localStorage.removeItem('wm_session'); location.reload(); };
 
 /*** ══════════ START ══════════ ***/
@@ -1366,3 +1370,4 @@ document.querySelectorAll('.tab').forEach(function (t) {
     });
   }
 })();
+                
