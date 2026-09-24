@@ -1353,11 +1353,35 @@ document.querySelectorAll('.tab').forEach(function (t) {
   if (!navigator.onLine) $('netbar').classList.remove('hidden');
   renderQueue();
 
+  // ============ SSO จากเว็บงานซ่อม (ไม่เกี่ยวกับ fbLogin/fbRequireUser เดิม) ============
+  // ถ้ามี ?sso=... ใน URL แปลว่าเข้ามาจากเว็บงานซ่อมที่ login ไว้แล้ว
+  // ให้ใช้ session ที่แนบมาแทนการให้กรอก email/PIN เอง แล้วลบออกจาก URL ทันที
+  let requestedSessionType = null;
+  (function hydrateSsoSession() {
+    const params = new URLSearchParams(location.search);
+    const ssoParam = params.get('sso');
+    if (!ssoParam) return;
+    try {
+      const session = JSON.parse(decodeURIComponent(escape(atob(ssoParam))));
+      LS.s = session;
+      requestedSessionType = params.get('session'); // เช่น 'MIDNIGHT'
+    } catch (e) {
+      console.error('SSO session parse error:', e);
+    }
+    params.delete('sso');
+    params.delete('session');
+    const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
+    history.replaceState({}, '', newUrl);
+  })();
+
   const s = LS.s;
   if (s) {
     S.user = s;
     busy(true);
-    try { await start(); }
+    try {
+      await start();
+      if (requestedSessionType) switchSession(requestedSessionType);
+    }
     catch (e) { localStorage.removeItem('wm_session'); S.user = null; }
     finally { busy(false); }
   }
