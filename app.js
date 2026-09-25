@@ -1,4 +1,4 @@
-  /*** ══════════ ตั้งค่า Firebase (แก้ตรงนี้ที่เดียว) ══════════ ***
+/*** ══════════ ตั้งค่า Firebase (แก้ตรงนี้ที่เดียว) ══════════ ***
  * คัดลอกค่า firebaseConfig จาก Firebase Console:
  * Project settings → General → Your apps → SDK setup and configuration
  ***/
@@ -1353,37 +1353,23 @@ document.querySelectorAll('.tab').forEach(function (t) {
   if (!navigator.onLine) $('netbar').classList.remove('hidden');
   renderQueue();
 
-  // ============ SSO จากเว็บงานซ่อม (ไม่เกี่ยวกับ fbLogin/fbRequireUser เดิม) ============
-  // ถ้ามี ?sso=... ใน URL แปลว่าเข้ามาจากเว็บงานซ่อมที่ login ไว้แล้ว
-  // ให้ใช้ session ที่แนบมาแทนการให้กรอก email/PIN เอง แล้วลบออกจาก URL ทันที
-  let requestedSessionType = null;
-  (function hydrateSsoSession() {
-    const params = new URLSearchParams(location.search);
-    const ssoParam = params.get('sso');
-    if (!ssoParam) return;
-    try {
-      const session = JSON.parse(decodeURIComponent(escape(atob(ssoParam))));
-      LS.s = session;
-      requestedSessionType = params.get('session'); // เช่น 'MIDNIGHT'
-    } catch (e) {
-      console.error('SSO session parse error:', e);
-    }
-    params.delete('sso');
-    params.delete('session');
-    const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
-    history.replaceState({}, '', newUrl);
-  })();
-
   const s = LS.s;
   if (s) {
     S.user = s;
     busy(true);
-    try {
-      await start();
-      if (requestedSessionType) switchSession(requestedSessionType);
-    }
+    try { await start(); }
     catch (e) { localStorage.removeItem('wm_session'); S.user = null; }
     finally { busy(false); }
+  } else if (window.AUTO_LOGIN && window.AUTO_LOGIN.username) {
+    busy(true);
+    try {
+      const u = await api('login', { email: window.AUTO_LOGIN.username, pin: window.AUTO_LOGIN.pin });
+      S.user = Object.assign({}, u, { pin: window.AUTO_LOGIN.pin });
+      LS.s = S.user;
+      await start();
+    } catch (e) {
+      msg('loginMsg', 'เข้าสู่ระบบอัตโนมัติไม่สำเร็จ: ' + e.message, 'err');
+    } finally { busy(false); }
   }
 
   if ('serviceWorker' in navigator) {
@@ -1394,4 +1380,3 @@ document.querySelectorAll('.tab').forEach(function (t) {
     });
   }
 })();
-                
