@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0369a1">
+<meta name="description" content="ระบบบันทึกและติดตามการใช้น้ำ 16 จุดตรวจวัด">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="จดมิเตอร์น้ำ">
+<title>ระบบจดมิเตอร์น้ำ</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="netbar" class="netbar hidden">ออฟไลน์ — ข้อมูลจะถูกส่งอัตโนมัติเมื่อกลับมาออนไลน์</div>
+
+<!-- ══════════ LOGIN ══════════ -->
+<section id="loginView" class="view">
+  <style>
+    #loginView { background: linear-gradient(160deg,#eef1f7,#dde3ee); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+    .neu-card { width:100%; max-width:360px; background:#e9edf5; border-radius:28px; padding:38px 28px 30px; box-shadow: 14px 14px 30px rgba(163,177,198,0.55), -14px -14px 30px rgba(255,255,255,0.85); text-align:center; }
+    .neu-avatar { width:76px; height:76px; border-radius:50%; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; background:#e9edf5; box-shadow: 8px 8px 16px rgba(163,177,198,0.55), -8px -8px 16px rgba(255,255,255,0.85); }
+    .neu-avatar svg { width:32px; height:32px; }
+    .neu-title { font-family:'Poppins',sans-serif; font-weight:600; font-size:21px; color:#2c3a55; margin:0 0 4px; }
+    .neu-sub { font-family:'Inter',sans-serif; font-size:13.5px; color:#8891a5; margin:0 0 26px; line-height:1.5; }
+    .neu-field { position:relative; margin-bottom:16px; text-align:left; }
+    .neu-field svg.f-icon { position:absolute; left:16px; top:50%; transform:translateY(-50%); width:18px; height:18px; opacity:.55; pointer-events:none; }
+    .neu-field input { width:100%; box-sizing:border-box; padding:14px 44px 14px 46px; border:none; border-radius:16px; background:#e9edf5; font-family:'Inter',sans-serif; font-size:15px; color:#2c3a55;
+      box-shadow: inset 6px 6px 12px rgba(163,177,198,0.5), inset -6px -6px 12px rgba(255,255,255,0.85); }
+    .neu-field input::placeholder { color:#a7aec0; }
+    .neu-field input:focus { outline:none; }
+    .neu-eye { position:absolute; right:14px; top:50%; transform:translateY(-50%); width:22px; height:22px; opacity:.55; cursor:pointer; border:none; background:none; padding:0; display:flex; align-items:center; justify-content:center; }
+    .neu-btn { width:100%; margin-top:6px; padding:15px; border:none; border-radius:16px; font-family:'Poppins',sans-serif; font-weight:600; font-size:15px; letter-spacing:.3px; color:#fff;
+      background:linear-gradient(135deg,#5c8bff,#3f66e0); box-shadow: 6px 6px 14px rgba(76,110,214,0.4), -4px -4px 10px rgba(255,255,255,0.5); cursor:pointer; }
+    .neu-btn:active { box-shadow: inset 4px 4px 10px rgba(0,0,0,.2); }
+    .neu-hint { margin-top:18px; font-family:'Inter',sans-serif; font-size:12.5px; color:#9aa1b3; }
+    .neu-ghost { margin-top:14px; width:100%; padding:12px; border:none; border-radius:16px; background:#e9edf5; color:#5c6a85; font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600;
+      box-shadow: 6px 6px 12px rgba(163,177,198,0.5), -6px -6px 12px rgba(255,255,255,0.85); cursor:pointer; }
+  </style>
+
+  <div class="neu-card">
+    <div class="neu-avatar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3f66e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6.5 6.8 6.5 10.8a6.5 6.5 0 1 1-13 0C5.5 9.8 12 3 12 3Z"/></svg>
+    </div>
+    <h1 class="neu-title">ระบบจดมิเตอร์น้ำ</h1>
+    <p class="neu-sub">เข้าสู่ระบบเพื่อบันทึกค่ามิเตอร์<br>16 จุดตรวจวัด</p>
+
+    <div class="neu-field">
+      <svg class="f-icon" viewBox="0 0 24 24" fill="none" stroke="#3f4a63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c1.6-3.6 4.6-5.4 7.5-5.4s5.9 1.8 7.5 5.4"/></svg>
+      <input id="loginEmail" type="text" placeholder="ชื่อผู้ใช้" autocomplete="username">
+    </div>
+    <div class="neu-field">
+      <svg class="f-icon" viewBox="0 0 24 24" fill="none" stroke="#3f4a63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2.4"/><path d="M8 10.5V7.8a4 4 0 1 1 8 0v2.7"/></svg>
+      <input id="loginPin" type="password" inputmode="numeric" placeholder="PIN" autocomplete="current-password">
+      <button type="button" id="btnTogglePin" class="neu-eye" aria-label="แสดง/ซ่อน PIN">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3f4a63" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-6.5 10-6.5S22 12 22 12s-3.8 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>
+      </button>
+    </div>
+
+    <button id="btnLogin" class="neu-btn">เข้าสู่ระบบ</button>
+    <button id="btnInstallLogin" class="neu-ghost hidden">📲 ติดตั้งแอปลงเครื่อง</button>
+    <p class="neu-hint">ลืม PIN? ติดต่อผู้ดูแลระบบ</p>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</section>
+
+<!-- ══════════ MAIN ══════════ -->
+<section id="mainView" class="view hidden">
+  <header class="appbar">
+    <div>
+      <div class="appbar-title">💧 จดมิเตอร์น้ำ</div>
+      <div class="appbar-sub"><span id="bizDate"></span> · <span id="userName"></span></div>
+    </div>
+    <div class="appbar-actions">
+      <button id="btnInstall" class="btn ghost small hidden">📲</button>
+      <button id="btnLogout" class="btn ghost small">ออก</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="entry">กรอกข้อมูล</button>
+    <button class="tab" data-tab="summary">รายงาน</button>
+    <button class="tab" data-tab="history">ประวัติ</button>
+    <button class="tab hidden" id="tabAdminBtn" data-tab="admin">⚙️ Admin</button>
+  </nav>
+
+  <!-- ───── TAB: ENTRY ───── -->
+  <div id="tab-entry" class="tabpanel">
+    <style>
+      .sessionbar { display:flex; gap:8px; margin-bottom:10px; }
+      .seg-btn { flex:1; padding:10px; border-radius:10px; border:1px solid #ccc; background:#f2f2f2; font-weight:600; cursor:pointer; }
+      .seg-btn.active { background:#0d6efd; color:#fff; border-color:#0d6efd; }
+      .midnight-status { padding:10px 14px; border-radius:10px; margin-bottom:10px; font-weight:600; }
+      .midnight-status.open { background:#e7f7ec; color:#146c2e; }
+      .midnight-status.closed { background:#fdeceb; color:#a12a22; }
+    </style>
+    <div class="sessionbar">
+      <button id="btnSessionDay" class="seg-btn active" data-session="DAY">🌤️ รอบปกติ</button>
+      <button id="btnSessionMidnight" class="seg-btn" data-session="MIDNIGHT">🌙 รอบเที่ยงคืน</button>
+    </div>
+    <div id="midnightStatus" class="midnight-status hidden"></div>
+
+    <div id="adminDateBox" class="adminbar hidden">
+      <span>🔑 โหมดผู้ดูแล — เลือกวันที่บันทึกได้</span>
+      <div class="row">
+        <input id="entryDate" type="date">
+        <button id="btnLoadEntryDate" class="btn small">โหลด</button>
+        <button id="btnTodayEntry" class="btn small">วันนี้</button>
+      </div>
+    </div>
+
+    <div class="progbar">
+      <div class="progtext">
+        <span>บันทึกแล้ว <b id="stDone">0</b>/<b id="stTotal">0</b></span>
+        <span>เหลือ <b id="stPending">0</b> จุด</span>
+        <span><button id="btnRefresh" class="mini-btn">🔄 รีเฟรช</button></span>
+      </div>
+      <div class="progtrack"><div id="progFill" class="progfill"></div></div>
+    </div>
+
+    <div class="tiphint">💡 จุดที่บันทึกแล้วจะซีดลง · หากต้องการแก้ไข ให้<b>แตะการ์ดนั้น 5 ครั้ง</b></div>
+
+    <div id="queueBar" class="queuebar hidden"></div>
+    <div id="meterList" class="mlist"></div>
+    <div id="entryMsg" class="msg"></div>
+  </div>
+
+  <!-- ───── TAB: SUMMARY / REPORT ───── -->
+  <div id="tab-summary" class="tabpanel hidden">
+    <div class="reportbar">
+      <div class="row">
+        <input id="sumDate" type="date">
+        <select id="sumRound">
+          <option value="เช้า">รอบเช้า</option>
+          <option value="เที่ยง" selected>รอบเที่ยง</option>
+          <option value="เย็น">รอบเย็น</option>
+          <option value="">ไม่ระบุรอบ</option>
+        </select>
+        <button id="btnLoadSum" class="btn primary">ดูรายงาน</button>
+      </div>
+      <div class="row optrow">
+        <label class="chkline"><input type="checkbox" id="optPad"> เติมศูนย์นำหน้า</label>
+        <label class="chkline"><input type="checkbox" id="optUsage"> แสดงหน่วยที่ใช้</label>
+      </div>
+      <div class="row">
+        <button id="btnMakeImg" class="btn primary" style="flex:1">🖼️ สร้างรูปภาพรายงาน</button>
+      </div>
+    </div>
+
+    <div id="imgBox" class="imgbox hidden">
+      <img id="reportImg" alt="รายงานมิเตอร์น้ำ">
+      <div class="row imgactions">
+        <button id="btnShareImg" class="btn primary" style="flex:1">📤 แชร์ / ส่ง LINE</button>
+        <button id="btnDownImg" class="btn" style="flex:1">⬇️ บันทึกรูป</button>
+      </div>
+      <div class="imghint">หากปุ่มแชร์ใช้ไม่ได้ ให้กดค้างที่รูปแล้วเลือก "บันทึกรูปภาพ"</div>
+    </div>
+
+    <div id="summaryWrap" class="summary-wrap"></div>
+    <div id="summaryMsg" class="msg"></div>
+  </div>
+
+  <!-- ───── TAB: HISTORY ───── -->
+  <div id="tab-history" class="tabpanel hidden">
+    <div class="row">
+      <select id="hisMeter"></select>
+      <button id="btnLoadHis" class="btn primary">ดู</button>
+    </div>
+    <div id="historyBox" class="list"></div>
+  </div>
+
+  <!-- ───── TAB: ADMIN ───── -->
+  <div id="tab-admin" class="tabpanel hidden">
+    <div class="adminbox danger">
+      <div class="adminbox-head">🔓 ปลดล็อกทั้งวัน (ล้างข้อมูล)</div>
+      <p class="danger-note">
+        ล้างข้อมูลการจดของวันที่เลือก <b>ทุกจุด ทุกรอบ</b> เพื่อเริ่มกรอกใหม่<br>
+        ข้อมูลเดิมจะถูกทำเครื่องหมายยกเลิกไว้ในระบบ ไม่ถูกลบถาวร
+      </p>
+      <div class="row">
+        <input id="resetDate" type="date">
+        <button id="btnResetDay" class="btn danger">ปลดล็อกทั้งวัน</button>
+      </div>
+      <div id="resetMsg" class="msg"></div>
+    </div>
+
+    <div class="adminbox">
+      <div class="adminbox-head">👥 จัดการผู้ใช้งาน</div>
+      <div class="row">
+        <button id="btnNewUser" class="btn primary">+ เพิ่มผู้ใช้</button>
+        <button id="btnReloadUsers" class="btn">รีเฟรช</button>
+      </div>
+      <div id="userList" class="list"></div>
+    </div>
+
+    <div class="adminbox">
+      <div class="adminbox-head">📖 วิธีใช้งาน</div>
+      <ul class="tips">
+        <li><b>บันทึกเบื้องหลัง</b> — กดบันทึกแล้วกรอกจุดอื่นต่อได้ทันที ไม่ต้องรอ</li>
+        <li><b>แก้ไขค่า</b> — แตะการ์ดที่ซีด <b>5 ครั้ง</b> จะเปิดช่องแก้ไขพร้อมเลขเดิม</li>
+        <li><b>🔓 รอบเพิ่ม</b> (เฉพาะ Admin) — บันทึกซ้ำในวันเดิม หลักหน้ารันเพิ่ม</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ MODAL: USER ══════════ -->
+<div id="userModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <b id="umTitle">เพิ่มผู้ใช้</b>
+      <button class="btn ghost small" id="umClose">✕</button>
+    </div>
+    <label>ชื่อผู้ใช้</label>
+    <input id="umEmail" type="text" placeholder="staff1">
+    <label>ชื่อที่แสดง</label>
+    <input id="umName" type="text" placeholder="เจ้าหน้าที่ 1">
+    <label>PIN (ตัวเลข 4-8 หลัก)</label>
+    <input id="umPin" type="text" inputmode="numeric" maxlength="8" placeholder="111111">
+    <label>บทบาท</label>
+    <select id="umRole">
+      <option value="RECORDER">RECORDER — บันทึกข้อมูล</option>
+      <option value="VIEWER">VIEWER — ดูอย่างเดียว</option>
+      <option value="ADMIN">ADMIN — ผู้ดูแลระบบ</option>
+    </select>
+    <label class="chkline"><input type="checkbox" id="umActive" checked> เปิดใช้งานบัญชีนี้</label>
+    <label>หมายเหตุ</label>
+    <input id="umNote" type="text" placeholder="">
+    <button id="umSave" class="btn primary big">บันทึกผู้ใช้</button>
+    <div id="umMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL: ยืนยันล้างข้อมูล ══════════ -->
+<div id="resetModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <b>⚠️ ยืนยันครั้งสุดท้าย</b>
+      <button class="btn ghost small" id="rmClose">✕</button>
+    </div>
+    <p class="danger-note">
+      กำลังจะล้างข้อมูลของวันที่ <b id="rmDate"></b><br>
+      จำนวน <b id="rmCount"></b> จุดที่บันทึกไว้<br><br>
+      พิมพ์คำว่า <b>ยืนยัน</b> เพื่อดำเนินการต่อ
+    </p>
+    <input id="rmText" type="text" placeholder="พิมพ์: ยืนยัน" autocomplete="off">
+    <button id="rmGo" class="btn danger big">ล้างข้อมูลทั้งวัน</button>
+    <div id="rmMsg" class="msg"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<canvas id="reportCanvas" class="hidden"></canvas>
+<div id="loading" class="loading hidden"><div class="spinner"></div></div>
+<script>
+  /* เข้าหน้านี้ = ล็อกอินอัตโนมัติด้วยบัญชี en1 (RECORDER) เสมอ ไม่ต้องกรอก login เอง */
+  window.AUTO_LOGIN = { username: 'admin', pin: '5321040152'};
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
