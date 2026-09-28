@@ -1003,7 +1003,7 @@ async function loadSummaryReport() {
   if (!date) return msg('summaryMsg', 'กรุณาเลือกวันที่', 'err');
   busy(true);
   try {
-    const d = await api('getDay', { date: date });
+    const d = await api('getDay', { date: date, session: $('sumRound').value || 'DAY' });
     S.reportData = d;
     $('imgBox').classList.add('hidden');
     renderSummaryPreview(d);
@@ -1011,6 +1011,19 @@ async function loadSummaryReport() {
   } catch (e) { msg('summaryMsg', e.message, 'err'); }
   finally { busy(false); }
 }
+
+function roundLabel(session) {
+  return String(session || 'DAY').toUpperCase() === 'MIDNIGHT' ? 'รอบเที่ยงคืน' : 'รอบเที่ยงวัน';
+}
+
+/* เปลี่ยนรอบในหน้ารายงาน → ตั้งวันที่ให้เหมาะกับรอบ และล้างรายงานเก่า */
+$('sumRound').onchange = function () {
+  $('sumDate').value = $('sumRound').value === 'MIDNIGHT' ? (midnightBusinessDate() || S.bizDate) : S.bizDate;
+  S.reportData = null; S.reportBlob = null;
+  $('summaryWrap').innerHTML = '';
+  $('imgBox').classList.add('hidden');
+  msg('summaryMsg', '', '');
+};
 
 function readingText(it) {
   if (it.fullReading === null || it.fullReading === undefined) return '';
@@ -1025,7 +1038,7 @@ function thaiHeaderDate(dateStr) {
 function renderSummaryPreview(d) {
   const showUsage = $('optUsage').checked;
   const t = thaiHeaderDate(d.date);
-  const round = $('sumRound').value;
+  const round = roundLabel(d.session);
 
   let h = '<div class="rp">';
   h += '<div class="rp-date"><span>วันที่</span><b>' + t.d + '</b><span>/</span><b>' + t.m + '</b><span>/</span><b>' + t.y + '</b></div>';
@@ -1082,7 +1095,7 @@ function fitFont(ctx, text, maxW, size, weight) {
 
 function drawReportCanvas(d) {
   const showUsage = $('optUsage').checked;
-  const round = $('sumRound').value;
+  const round = roundLabel(d.session);
   const items = d.items;
   const t = thaiHeaderDate(d.date);
 
@@ -1198,8 +1211,8 @@ function drawReportCanvas(d) {
 }
 
 function reportFileName() {
-  const r = $('sumRound').value;
-  return 'meter_' + $('sumDate').value + (r ? '_' + r : '') + '.png';
+  const r = $('sumRound').value === 'MIDNIGHT' ? 'เที่ยงคืน' : 'เที่ยงวัน';
+  return 'meter_' + $('sumDate').value + '_' + r + '.png';
 }
 
 $('btnShareImg').onclick = async function () {
